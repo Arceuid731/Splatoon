@@ -37,6 +37,7 @@ public sealed record RepositoryDefinition
     public bool Enabled { get; init; } = true;
     public RepositoryTrust Trust { get; init; } = RepositoryTrust.Untrusted;
     public IReadOnlyList<string> PathPrefixes { get; init; } = [];
+    public IReadOnlyList<string> ExcludedPathPrefixes { get; init; } = [];
 
     public string FullName => $"{Owner}/{Name}";
 
@@ -48,6 +49,7 @@ public sealed record RepositoryDefinition
         DisplayName = "Official Splatoon",
         Trust = RepositoryTrust.Official,
         PathPrefixes = ["Presets/", "SplatoonScripts/"],
+        ExcludedPathPrefixes = ["SplatoonScripts/Tests/"],
     };
 }
 

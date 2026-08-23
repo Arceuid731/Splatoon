@@ -42,6 +42,7 @@ public sealed class PresetIndexerTests
             RepositoryDefinition.OfficialSplatoon(),
             [
                 ("SplatoonScripts/Duties/Dawntrail/Safe Tiles.cs", source),
+                ("SplatoonScripts/Tests/Should Not Appear.cs", source),
                 ("Splatoon/Internal.cs", source),
             ]);
 

@@ -1,0 +1,43 @@
+name: Package Preset Hub
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+      - name: Download current Dalamud development files
+        shell: pwsh
+        run: |
+          $archive = Join-Path $env:RUNNER_TEMP "dalamud.zip"
+          $directory = Join-Path $env:RUNNER_TEMP "dalamud"
+          Invoke-WebRequest "https://goatcorp.github.io/dalamud-distrib/latest.zip" -OutFile $archive
+          Expand-Archive $archive -DestinationPath $directory
+          "DALAMUD_PATH=$directory" >> $env:GITHUB_ENV
+      - name: Build plugin package
+        shell: pwsh
+        run: dotnet build Splatoon/Splatoon.csproj --configuration Release -p:Platform=x64 -p:DalamudLibPath="$env:DALAMUD_PATH/"
+      - name: Collect package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force artifacts | Out-Null
+          $package = Get-ChildItem Splatoon/bin/Release -Recurse -Filter latest.zip | Select-Object -First 1
+          if ($null -eq $package) { throw "DalamudPackager did not produce latest.zip" }
+          Copy-Item $package.FullName artifacts/Splatoon-PresetHub-3.9.2.23.zip
+      - uses: actions/upload-artifact@v7
+        with:
+          name: Splatoon-PresetHub-3.9.2.23
+          path: artifacts/Splatoon-PresetHub-3.9.2.23.zip
+          if-no-files-found: error
+          retention-days: 14

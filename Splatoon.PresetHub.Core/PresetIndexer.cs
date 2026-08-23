@@ -36,8 +36,10 @@ public sealed partial class PresetIndexer
     }
 
     private static bool IsIncluded(RepositoryDefinition repository, string path) =>
-        repository.PathPrefixes.Count == 0 ||
-        repository.PathPrefixes.Any(prefix => path.StartsWith(
+        (repository.PathPrefixes.Count == 0 ||
+         repository.PathPrefixes.Any(prefix => path.StartsWith(
+             prefix.TrimStart('/').Replace('\\', '/'), StringComparison.OrdinalIgnoreCase))) &&
+        !repository.ExcludedPathPrefixes.Any(prefix => path.StartsWith(
             prefix.TrimStart('/').Replace('\\', '/'), StringComparison.OrdinalIgnoreCase));
 
     private static IEnumerable<PresetEntry> IndexMarkdown(

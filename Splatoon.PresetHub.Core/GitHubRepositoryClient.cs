@@ -46,6 +46,8 @@ public sealed class GitHubRepositoryClient(HttpClient httpClient)
                            path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
             .Where(path => repository.PathPrefixes.Count == 0 || repository.PathPrefixes.Any(prefix =>
                 path.StartsWith(prefix.TrimStart('/').Replace('\\', '/'), StringComparison.OrdinalIgnoreCase)))
+            .Where(path => !repository.ExcludedPathPrefixes.Any(prefix =>
+                path.StartsWith(prefix.TrimStart('/').Replace('\\', '/'), StringComparison.OrdinalIgnoreCase)))
             .ToArray();
 
         using var concurrency = new SemaphoreSlim(8);

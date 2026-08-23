@@ -2,6 +2,12 @@
 
 No release or install endpoint is published by this repository yet. The files under `distribution/` only prepare a future custom repository after explicit approval.
 
+Once the test release is published, the custom repository URL is:
+
+```text
+https://raw.githubusercontent.com/Arceuid731/Splatoon/codex/preset-hub-v1/distribution/pluginmaster.json
+```
+
 ## Release checklist
 
 1. Merge a tested Preset Hub release commit into the chosen release branch.

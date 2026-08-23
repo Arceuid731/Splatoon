@@ -12,7 +12,7 @@ Only three small hooks exist outside those folders: one project reference, modul
 
 ## V1 behaviour
 
-- The official `PunishXIV/Splatoon` repository is configured on first use with `Presets/` and `SplatoonScripts/` prefixes.
+- The official `PunishXIV/Splatoon` repository is configured on first use with `Presets/` and `SplatoonScripts/` prefixes; upstream developer-only `SplatoonScripts/Tests/` files are excluded.
 - Additional public GitHub repositories can be added as `owner/repository`, enabled/disabled, refreshed, and removed.
 - The GitHub commit SHA is checked before downloading changed `.md` and `.cs` files. Cached snapshots remain usable when GitHub is unavailable.
 - Layouts are imported through Splatoon's existing importer and tracked by their installed layout names.

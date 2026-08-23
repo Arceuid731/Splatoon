@@ -77,7 +77,7 @@ public static unsafe class Utils
     public static List<PointerLineSegment> PreparePointerLine(Vector3 start, Vector3 end, PointerLineStyle style)
     {
         var result = Utils.SplitLine(start, end, style.ChunkLength!.Value, style.IntervalLength!.Value, (float)((Environment.TickCount64 / (double)style.AnimationDuration!.Value) % 1d));
-        List<PointerLineSegment> ret = [with(result.Count * 3)];
+        List<PointerLineSegment> ret = new(result.Count * 3);
         for(var i = 0; i < result.Count; i++)
         {
             var x = result[i];
