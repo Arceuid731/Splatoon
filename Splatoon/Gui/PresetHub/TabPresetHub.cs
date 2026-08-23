@@ -1,0 +1,279 @@
+using Dalamud.Interface.Colors;
+using ECommons.ImGuiMethods;
+using Splatoon.Modules.PresetHub;
+using Splatoon.PresetHub.Core;
+
+namespace Splatoon.Gui.PresetHub;
+
+internal static class TabPresetHub
+{
+    private static string search = "";
+    private static PresetKind? kindFilter;
+    private static InstallationStatus? statusFilter;
+    private static string expansionFilter = "";
+    private static string categoryFilter = "";
+    private static PresetEntry? reviewedScript;
+    private static ScriptSecurityReport? reviewReport;
+    private static bool reviewConfirmed;
+    private static string repositoryInput = "";
+    private static string referenceInput = "main";
+    private static string pathsInput = "Presets/;SplatoonScripts/";
+    private static string repositoryError = "";
+    private static string actionMessage = "";
+
+    internal static void Draw()
+    {
+        var hub = P.PresetHub;
+        if(ImGui.BeginTabBar("PresetHubTabs"))
+        {
+            if(ImGui.BeginTabItem("Browse"))
+            {
+                DrawBrowser(hub, installedOnly: false);
+                ImGui.EndTabItem();
+            }
+            if(ImGui.BeginTabItem("Installed"))
+            {
+                DrawBrowser(hub, installedOnly: true);
+                ImGui.EndTabItem();
+            }
+            if(ImGui.BeginTabItem("Repositories"))
+            {
+                DrawRepositories(hub);
+                ImGui.EndTabItem();
+            }
+            ImGui.EndTabBar();
+        }
+    }
+
+    private static void DrawBrowser(PresetHubModule hub, bool installedOnly)
+    {
+        ImGui.SetNextItemWidth(260f.Scale());
+        ImGui.InputTextWithHint("##PresetHubSearch", "Search title, duty, author...", ref search, 200);
+        ImGui.SameLine();
+        DrawNullableEnumCombo("Type", ref kindFilter);
+        ImGui.SameLine();
+        DrawNullableEnumCombo("Status", ref statusFilter);
+
+        var presets = hub.Presets;
+        DrawStringCombo("Expansion", ref expansionFilter, presets.Select(x => x.Expansion));
+        ImGui.SameLine();
+        DrawStringCombo("Category", ref categoryFilter, presets.Select(x => x.Category));
+        ImGui.SameLine();
+        if(ImGui.Button(hub.IsSyncing ? "Refreshing..." : "Refresh") && !hub.IsSyncing)
+        {
+            _ = hub.SyncAllAsync(force: true);
+        }
+
+        ImGui.TextDisabled(hub.LastMessage);
+        if(!string.IsNullOrWhiteSpace(actionMessage)) ImGuiEx.TextWrapped(ImGuiColors.DalamudYellow, actionMessage);
+        ImGui.Separator();
+
+        var filtered = presets.Where(preset => Matches(preset, hub, installedOnly)).ToArray();
+        if(ImGui.BeginTable("PresetHubBrowser", 6,
+               ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.Resizable | ImGuiTableFlags.ScrollY,
+               new(0, reviewedScript == null ? 0 : 270f.Scale())))
+        {
+            ImGui.TableSetupScrollFreeze(0, 1);
+            ImGui.TableSetupColumn("Preset", ImGuiTableColumnFlags.WidthStretch);
+            ImGui.TableSetupColumn("Type", ImGuiTableColumnFlags.WidthFixed, 70f.Scale());
+            ImGui.TableSetupColumn("Content", ImGuiTableColumnFlags.WidthStretch);
+            ImGui.TableSetupColumn("Repository", ImGuiTableColumnFlags.WidthFixed, 130f.Scale());
+            ImGui.TableSetupColumn("Status", ImGuiTableColumnFlags.WidthFixed, 100f.Scale());
+            ImGui.TableSetupColumn("Action", ImGuiTableColumnFlags.WidthFixed, 145f.Scale());
+            ImGui.TableHeadersRow();
+
+            foreach(var preset in filtered)
+            {
+                DrawPresetRow(hub, preset);
+            }
+            ImGui.EndTable();
+        }
+
+        if(reviewedScript != null && reviewReport != null) DrawScriptReview(hub, reviewedScript, reviewReport);
+    }
+
+    private static void DrawPresetRow(PresetHubModule hub, PresetEntry preset)
+    {
+        var status = hub.Installer.GetStatus(preset);
+        ImGui.PushID(preset.Id);
+        ImGui.TableNextRow();
+        ImGui.TableNextColumn();
+        ImGui.TextUnformatted(preset.Title);
+        if(!string.IsNullOrWhiteSpace(preset.Author)) ImGui.TextDisabled(preset.Author);
+        ImGui.TableNextColumn();
+        ImGui.TextColored(preset.Kind == PresetKind.Script ? ImGuiColors.DalamudYellow : ImGuiColors.HealerGreen, preset.Kind.ToString());
+        ImGui.TableNextColumn();
+        ImGui.TextUnformatted(string.Join(" / ", new[] { preset.Expansion, preset.Category, preset.Duty }.Where(x => x.Length > 0)));
+        ImGui.TableNextColumn();
+        ImGui.TextUnformatted(preset.RepositoryName);
+        ImGui.TextDisabled(preset.Trust.ToString());
+        ImGui.TableNextColumn();
+        ImGui.TextUnformatted(status.ToString());
+        ImGui.TableNextColumn();
+
+        if(preset.Kind == PresetKind.Script)
+        {
+            if(ImGui.Button(status == InstallationStatus.UpdateAvailable ? "Review update" : "Review"))
+            {
+                reviewedScript = preset;
+                reviewReport = hub.SecurityAnalyzer.Analyze(preset.Content);
+                reviewConfirmed = false;
+            }
+        }
+        else if(status != InstallationStatus.Installed && ImGui.Button(status == InstallationStatus.UpdateAvailable ? "Update" : "Install"))
+        {
+            hub.Installer.InstallLayout(preset, out actionMessage);
+        }
+
+        if(status != InstallationStatus.NotInstalled)
+        {
+            if(preset.Kind == PresetKind.Script || status == InstallationStatus.Installed) ImGui.SameLine();
+            if(ImGui.Button("Uninstall")) hub.Installer.Uninstall(preset, out actionMessage);
+        }
+        ImGui.PopID();
+    }
+
+    private static void DrawScriptReview(PresetHubModule hub, PresetEntry preset, ScriptSecurityReport report)
+    {
+        ImGui.Separator();
+        ImGui.TextUnformatted($"Security review: {preset.Title}");
+        ImGuiEx.TextWrapped(ImGuiColors.DalamudYellow,
+            "C# scripts run with Splatoon's access. Static analysis reduces surprises but cannot prove that a script is safe.");
+        ImGui.TextUnformatted($"Source: {preset.RepositoryName} ({preset.Trust})");
+        ImGui.TextUnformatted($"SHA-256: {report.ContentHash}");
+
+        foreach(var finding in report.Findings)
+        {
+            var color = finding.Severity switch
+            {
+                SecuritySeverity.High => ImGuiColors.DalamudRed,
+                SecuritySeverity.Warning => ImGuiColors.DalamudYellow,
+                _ => ImGuiColors.DalamudGrey,
+            };
+            ImGui.TextColored(color, $"[{finding.Severity}] {finding.Title}{(finding.Line is null ? "" : $" (line {finding.Line})")}");
+            ImGui.SameLine();
+            ImGui.TextDisabled(finding.Detail);
+        }
+
+        if(ImGui.TreeNode("Reviewed source code"))
+        {
+            var source = preset.Content;
+            ImGui.InputTextMultiline("##PresetHubSource", ref source, Math.Max(source.Length + 1, 2),
+                new(-1, 180f.Scale()), ImGuiInputTextFlags.ReadOnly);
+            ImGui.TreePop();
+        }
+
+        ImGui.Checkbox("I reviewed this exact hash and accept running it", ref reviewConfirmed);
+        if(!reviewConfirmed) ImGui.BeginDisabled();
+        if(ImGui.Button(hub.Installer.GetStatus(preset) == InstallationStatus.UpdateAvailable ? "Install reviewed update" : "Install reviewed script"))
+        {
+            hub.Installer.InstallReviewedScript(preset, report, out actionMessage);
+            reviewedScript = null;
+            reviewReport = null;
+            reviewConfirmed = false;
+        }
+        if(!reviewConfirmed) ImGui.EndDisabled();
+        ImGui.SameLine();
+        if(ImGui.Button("Close review"))
+        {
+            reviewedScript = null;
+            reviewReport = null;
+            reviewConfirmed = false;
+        }
+    }
+
+    private static void DrawRepositories(PresetHubModule hub)
+    {
+        ImGuiEx.TextWrapped("Preset Hub downloads GitHub archives into Splatoon's local configuration cache. Disabling a repository keeps its current cache; removing it hides its indexed presets.");
+        if(ImGui.BeginTable("PresetHubRepositories", 5, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingStretchProp))
+        {
+            ImGui.TableSetupColumn("Enabled", ImGuiTableColumnFlags.WidthFixed, 65f.Scale());
+            ImGui.TableSetupColumn("Repository");
+            ImGui.TableSetupColumn("Ref", ImGuiTableColumnFlags.WidthFixed, 90f.Scale());
+            ImGui.TableSetupColumn("Trust", ImGuiTableColumnFlags.WidthFixed, 90f.Scale());
+            ImGui.TableSetupColumn("Action", ImGuiTableColumnFlags.WidthFixed, 80f.Scale());
+            ImGui.TableHeadersRow();
+            foreach(var repository in hub.Repositories)
+            {
+                ImGui.PushID(repository.Id);
+                ImGui.TableNextRow();
+                ImGui.TableNextColumn();
+                var enabled = repository.Enabled;
+                if(ImGui.Checkbox("##enabled", ref enabled)) hub.SetEnabled(repository.Id, enabled);
+                ImGui.TableNextColumn();
+                ImGui.TextUnformatted(repository.FullName);
+                ImGui.TextDisabled(string.Join("; ", repository.PathPrefixes));
+                ImGui.TableNextColumn();
+                ImGui.TextUnformatted(repository.Ref);
+                ImGui.TableNextColumn();
+                ImGui.TextUnformatted(repository.Trust.ToString());
+                ImGui.TableNextColumn();
+                if(repository.Id != "punishxiv-splatoon" && ImGui.Button("Remove")) hub.RemoveRepository(repository.Id);
+                ImGui.PopID();
+            }
+            ImGui.EndTable();
+        }
+
+        ImGui.Separator();
+        ImGui.TextUnformatted("Add GitHub repository");
+        ImGui.SetNextItemWidth(260f.Scale());
+        ImGui.InputTextWithHint("##repo", "owner/repository", ref repositoryInput, 200);
+        ImGui.SameLine();
+        ImGui.SetNextItemWidth(100f.Scale());
+        ImGui.InputTextWithHint("##ref", "branch/tag", ref referenceInput, 100);
+        ImGui.SetNextItemWidth(360f.Scale());
+        ImGui.InputTextWithHint("##paths", "Optional prefixes separated by ;", ref pathsInput, 500);
+        ImGui.SameLine();
+        if(ImGui.Button("Add and index"))
+        {
+            if(hub.AddRepository(repositoryInput, referenceInput, pathsInput, out repositoryError))
+            {
+                repositoryInput = "";
+                repositoryError = "";
+            }
+        }
+        if(!string.IsNullOrWhiteSpace(repositoryError)) ImGuiEx.TextWrapped(ImGuiColors.DalamudRed, repositoryError);
+    }
+
+    private static bool Matches(PresetEntry preset, PresetHubModule hub, bool installedOnly)
+    {
+        var status = hub.Installer.GetStatus(preset);
+        if(installedOnly && status == InstallationStatus.NotInstalled) return false;
+        if(kindFilter != null && preset.Kind != kindFilter) return false;
+        if(statusFilter != null && status != statusFilter) return false;
+        if(expansionFilter.Length > 0 && preset.Expansion != expansionFilter) return false;
+        if(categoryFilter.Length > 0 && preset.Category != categoryFilter) return false;
+        if(search.Length == 0) return true;
+
+        return new[] { preset.Title, preset.Author, preset.Duty, preset.Category, preset.Expansion, preset.RepositoryName }
+            .Any(value => value.Contains(search, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static void DrawNullableEnumCombo<T>(string label, ref T? value) where T : struct, Enum
+    {
+        ImGui.SetNextItemWidth(120f.Scale());
+        if(ImGui.BeginCombo($"##{label}", value?.ToString() ?? label))
+        {
+            if(ImGui.Selectable($"All {label.ToLowerInvariant()}", value == null)) value = null;
+            foreach(var option in Enum.GetValues<T>())
+            {
+                if(ImGui.Selectable(option.ToString(), EqualityComparer<T?>.Default.Equals(value, option))) value = option;
+            }
+            ImGui.EndCombo();
+        }
+    }
+
+    private static void DrawStringCombo(string label, ref string value, IEnumerable<string> values)
+    {
+        ImGui.SetNextItemWidth(150f.Scale());
+        if(ImGui.BeginCombo($"##{label}", value.Length == 0 ? label : value))
+        {
+            if(ImGui.Selectable($"All {label.ToLowerInvariant()}", value.Length == 0)) value = "";
+            foreach(var option in values.Where(x => x.Length > 0).Distinct().Order())
+            {
+                if(ImGui.Selectable(option, value == option)) value = option;
+            }
+            ImGui.EndCombo();
+        }
+    }
+}

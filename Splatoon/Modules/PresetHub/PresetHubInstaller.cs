@@ -1,0 +1,98 @@
+using ECommons;
+using Splatoon.PresetHub.Core;
+using Splatoon.SplatoonScripting;
+using Splatoon.Utility;
+
+namespace Splatoon.Modules.PresetHub;
+
+internal sealed class PresetHubInstaller(InstallationRegistry registry)
+{
+    internal IReadOnlyCollection<InstallationRecord> Records => registry.Records;
+
+    internal InstallationStatus GetStatus(PresetEntry preset) => registry.GetStatus(preset);
+
+    internal bool InstallLayout(PresetEntry preset, out string message)
+    {
+        var previousRecord = registry.Find(preset.Id);
+        var previousNames = SplitRuntimeIdentity(previousRecord?.RuntimeIdentity);
+        var previousLayouts = P.Config.LayoutsL.Where(x => previousNames.Contains(x.Name)).ToArray();
+        P.Config.LayoutsL.RemoveAll(x => previousNames.Contains(x.Name));
+
+        var imported = Utils.ImportLayouts(preset.Content, silent: true);
+        if(imported.Count == 0)
+        {
+            P.Config.LayoutsL.AddRange(previousLayouts);
+            message = "Splatoon rejected the layout. An existing layout may use the same name.";
+            return false;
+        }
+
+        var runtimeIdentity = string.Join('\n', imported.Select(x => x.Name));
+        registry.MarkInstalled(preset, runtimeIdentity);
+        P.Config.Save();
+        message = $"Installed {imported.Count} layout(s).";
+        return true;
+    }
+
+    internal bool InstallReviewedScript(PresetEntry preset, ScriptSecurityReport report, out string message)
+    {
+        if(report.ContentHash != preset.ContentHash)
+        {
+            message = "The script changed after review. Review it again before installing.";
+            return false;
+        }
+        if(string.IsNullOrWhiteSpace(preset.RuntimeIdentity))
+        {
+            message = "No SplatoonScript class could be identified in this file.";
+            return false;
+        }
+
+        ScriptingProcessor.CompileAndLoad(preset.Content, null, false, true);
+        registry.MarkInstalled(preset, preset.RuntimeIdentity);
+        message = "The reviewed script was queued for compilation and installation.";
+        return true;
+    }
+
+    internal bool Uninstall(PresetEntry preset, out string message)
+    {
+        var record = registry.Find(preset.Id);
+        if(record == null)
+        {
+            message = "Preset Hub has no installation record for this preset.";
+            return false;
+        }
+
+        if(record.Kind == PresetKind.Layout)
+        {
+            var names = SplitRuntimeIdentity(record.RuntimeIdentity);
+            var removed = P.Config.LayoutsL.RemoveAll(x => names.Contains(x.Name));
+            P.Config.Save();
+            registry.Remove(preset.Id);
+            message = $"Removed {removed} managed layout(s).";
+            return true;
+        }
+
+        var script = ScriptingProcessor.Scripts.FirstOrDefault(x => x.InternalData.FullName == record.RuntimeIdentity);
+        if(script != null)
+        {
+            new TickScheduler(() =>
+            {
+                script.Disable();
+                ScriptingProcessor.RemoveScript(script);
+                if(!string.IsNullOrWhiteSpace(script.InternalData.Path) &&
+                   script.InternalData.Path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
+                {
+                    GenericHelpers.DeleteFileToRecycleBin(script.InternalData.Path);
+                }
+            });
+        }
+        registry.Remove(preset.Id);
+        message = script == null
+            ? "Removed the stale installation record; the script was not loaded."
+            : "Removed the managed script and moved its source file to the recycle bin.";
+        return true;
+    }
+
+    private static HashSet<string> SplitRuntimeIdentity(string? value) =>
+        value?.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToHashSet(StringComparer.Ordinal) ?? [];
+}

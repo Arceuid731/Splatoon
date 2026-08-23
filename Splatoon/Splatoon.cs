@@ -26,6 +26,7 @@ using Splatoon.Gui.Scripting;
 using Splatoon.Gui.Windows;
 using Splatoon.Memory;
 using Splatoon.Modules;
+using Splatoon.Modules.PresetHub;
 using Splatoon.RenderEngines.DirectX11;
 using Splatoon.Serializables;
 using Splatoon.SplatoonScripting;
@@ -137,6 +138,7 @@ public unsafe class Splatoon : IDalamudPlugin
     internal TaskManager TaskManager;
     internal bool ForceLoadDX11 = false;
     internal LinuxWarningPopup LinuxWarningPopup;
+    internal PresetHubModule PresetHub;
     internal uint FrameCounter = 1000;
 
     internal void Load(IDalamudPluginInterface pluginInterface)
@@ -259,6 +261,7 @@ public unsafe class Splatoon : IDalamudPlugin
         TaskManager = new(new(showDebug: true));
         ScriptingProcessor.TerritoryChanged();
         ScriptingProcessor.ReloadAll();
+        PresetHub = new();
         Init = true;
         SplatoonIPC.Init();
     }
@@ -300,6 +303,7 @@ public unsafe class Splatoon : IDalamudPlugin
         Safe(TetherProcessor.Dispose);
         Safe(AttachedInfo.Dispose);
         Safe(ScriptingProcessor.Dispose);
+        Safe(PresetHub.Dispose);
         Safe(BuffEffectProcessor.Dispose);
         ECommonsMain.Dispose();
         P = null;

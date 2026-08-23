@@ -15,6 +15,7 @@ using Newtonsoft.Json;
 using Splatoon.ConfigGui;
 using Splatoon.Gui;
 using Splatoon.Gui.Scripting;
+using Splatoon.Gui.PresetHub;
 using Splatoon.Gui.Tabs;
 using Splatoon.Memory;
 using Splatoon.SplatoonScripting;
@@ -210,6 +211,7 @@ internal unsafe partial class CGui : ConfigWindow
                     ("Render".Loc() + "###tab2", DisplayRenderers, null, true),
                     ("Layouts".Loc(), DislayLayouts, Colors.Green.ToVector4(), true),
                     ("Scripts".Loc(), TabScripting.Draw, Colors.Yellow.ToVector4(), true),
+                    ("Preset Hub", TabPresetHub.Draw, EColor.CyanBright, true),
                     ("Configurations".Loc(), CGuiConfigurations.Draw, EColor.PurpleBright, true),
                     ("Projection".Loc(), TabProjection.Draw, EColor.CyanBright, true),
                     ("Tools".Loc(), delegate

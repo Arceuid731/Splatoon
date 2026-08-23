@@ -78,6 +78,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
+	  <ProjectReference Include="..\Splatoon.PresetHub.Core\Splatoon.PresetHub.Core.csproj" />
 	  <ProjectReference Include="..\AutoRetainerAPI\AutoRetainerAPI\AutoRetainerAPI.csproj" />
 	  <ProjectReference Include="..\ECommons.IPC\ECommons.IPC\ECommons.IPC.csproj" />
 	  <ProjectReference Include="..\ECommons\ECommons\ECommons.csproj" />

@@ -1,0 +1,35 @@
+name: Preset Hub CI
+
+on:
+  push:
+    paths:
+      - "Splatoon.PresetHub.Core/**"
+      - "Splatoon.PresetHub.Core.Tests/**"
+      - "Splatoon/Modules/PresetHub/**"
+      - "Splatoon/Gui/PresetHub/**"
+      - ".github/workflows/Preset Hub CI.yml"
+  pull_request:
+    paths:
+      - "Splatoon.PresetHub.Core/**"
+      - "Splatoon.PresetHub.Core.Tests/**"
+      - "Splatoon/Modules/PresetHub/**"
+      - "Splatoon/Gui/PresetHub/**"
+      - ".github/workflows/Preset Hub CI.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  core-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+      - name: Restore
+        run: dotnet restore Splatoon.PresetHub.Core.Tests/Splatoon.PresetHub.Core.Tests.csproj
+      - name: Test
+        run: dotnet test Splatoon.PresetHub.Core.Tests/Splatoon.PresetHub.Core.Tests.csproj --no-restore --configuration Release
