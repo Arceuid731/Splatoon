@@ -52,7 +52,7 @@ public sealed partial class PresetIndexer
         foreach(Match match in LayoutLineRegex().Matches(content))
         {
             var payload = "~Lv2~" + match.Groups["json"].Value.Trim();
-            var (name, group) = ReadLayoutIdentity(match.Groups["json"].Value, relativePath, ordinal);
+            var (name, group, territoryIds) = ReadLayoutIdentity(match.Groups["json"].Value, relativePath, ordinal);
             var title = string.IsNullOrWhiteSpace(name) ? location.Duty : name;
             yield return CreateEntry(
                 repository,
@@ -62,7 +62,8 @@ public sealed partial class PresetIndexer
                 payload,
                 runtimeIdentity: name,
                 location with { Duty = string.IsNullOrWhiteSpace(group) ? location.Duty : group },
-                ordinal++);
+                ordinal++,
+                territoryIds: territoryIds);
         }
     }
 
@@ -79,6 +80,7 @@ public sealed partial class PresetIndexer
             : $"{(string.IsNullOrWhiteSpace(scriptNamespace) ? "Default" : scriptNamespace)}@{scriptClass}";
         var author = AuthorRegex().Match(content).Groups[1].Value.Trim();
         var title = Path.GetFileNameWithoutExtension(relativePath);
+        var territoryIds = ReadScriptTerritories(content);
 
         return CreateEntry(
             repository,
@@ -89,7 +91,8 @@ public sealed partial class PresetIndexer
             runtimeIdentity,
             location,
             0,
-            author);
+            author,
+            territoryIds);
     }
 
     private static PresetEntry CreateEntry(
@@ -101,7 +104,8 @@ public sealed partial class PresetIndexer
         string runtimeIdentity,
         PresetLocation location,
         int ordinal,
-        string author = "")
+        string author = "",
+        IReadOnlyList<uint>? territoryIds = null)
     {
         var stableSource = $"github:{repository.FullName}:{relativePath}:{kind}:{ordinal}";
         return new()
@@ -116,6 +120,7 @@ public sealed partial class PresetIndexer
             Expansion = location.Expansion,
             Category = location.Category,
             Duty = location.Duty,
+            TerritoryIds = territoryIds ?? [],
             RelativePath = relativePath,
             SourceUri = $"https://github.com/{repository.FullName}/blob/{repository.Ref}/{Uri.EscapeDataString(relativePath).Replace("%2F", "/")}",
             Content = content,
@@ -124,7 +129,7 @@ public sealed partial class PresetIndexer
         };
     }
 
-    private static (string Name, string Group) ReadLayoutIdentity(string json, string path, int ordinal)
+    private static (string Name, string Group, IReadOnlyList<uint> TerritoryIds) ReadLayoutIdentity(string json, string path, int ordinal)
     {
         try
         {
@@ -132,12 +137,30 @@ public sealed partial class PresetIndexer
             var root = document.RootElement;
             var name = root.TryGetProperty("Name", out var nameProperty) ? nameProperty.GetString() ?? "" : "";
             var group = root.TryGetProperty("Group", out var groupProperty) ? groupProperty.GetString() ?? "" : "";
-            return (name, group);
+            var territoryIds = root.TryGetProperty("ZoneLockH", out var zoneLock) && zoneLock.ValueKind == JsonValueKind.Array
+                ? zoneLock.EnumerateArray()
+                    .Where(x => x.ValueKind == JsonValueKind.Number && x.TryGetUInt32(out _))
+                    .Select(x => x.GetUInt32())
+                    .Distinct()
+                    .ToArray()
+                : [];
+            return (name, group, territoryIds);
         }
         catch(JsonException)
         {
-            return ($"{Path.GetFileNameWithoutExtension(path)} #{ordinal + 1}", "");
+            return ($"{Path.GetFileNameWithoutExtension(path)} #{ordinal + 1}", "", []);
         }
+    }
+
+    private static IReadOnlyList<uint> ReadScriptTerritories(string content)
+    {
+        var match = ScriptTerritoriesRegex().Match(content);
+        if(!match.Success) return [];
+        return UnsignedIntegerRegex().Matches(match.Groups["values"].Value)
+            .Select(x => uint.TryParse(x.Groups["value"].Value, out var value) ? value : 0)
+            .Where(x => x > 0)
+            .Distinct()
+            .ToArray();
     }
 
     private static PresetLocation LocationFromPath(string relativePath)
@@ -173,4 +196,10 @@ public sealed partial class PresetIndexer
 
     [GeneratedRegex("new(?:\\s+Metadata)?\\s*\\([^\\)]*?author\\s*:\\s*\\\"([^\\\"]+)\\\"", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex AuthorRegex();
+
+    [GeneratedRegex(@"\bValidTerritories\b[\s\S]{0,200}?(?:=>|=)\s*\[(?<values>[^\]]*)\]", RegexOptions.CultureInvariant)]
+    private static partial Regex ScriptTerritoriesRegex();
+
+    [GeneratedRegex(@"\b(?<value>\d+)[uU]?\b", RegexOptions.CultureInvariant)]
+    private static partial Regex UnsignedIntegerRegex();
 }

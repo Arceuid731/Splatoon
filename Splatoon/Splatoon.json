@@ -1,8 +1,8 @@
 {
 		"Author": "NightmareXIV; Preset Hub integration by Arceuid731",
 		"Name": "Splatoon (Preset Hub)",
-		"Punchline": "Splatoon with an integrated, review-first preset browser.",
-		"Description": "A custom Splatoon build with Preset Hub V1: public GitHub repositories, local cache, layout and script indexing, search and filters, managed installation/update/removal, and explicit C# security review.",
+		"Punchline": "Splatoon with contextual, review-first duty presets.",
+		"Description": "A custom Splatoon build with Preset Hub V2: repository browsing, exact duty-entry suggestions, remembered choices, managed layout installation/update/removal, and explicit C# security review.",
 		"Tags": [
 				"Utility",
 				"Accessibility"
@@ -11,9 +11,9 @@
 		"RepoUrl": "https://github.com/Arceuid731/Splatoon",
 		"ApplicableVersion": "any",
 		"LastUpdate": 1684437468,
-		"DownloadLinkInstall": "https://github.com/Arceuid731/Splatoon/releases/download/preset-hub-v1.0.2/Splatoon-PresetHub-3.9.2.25.zip",
-		"DownloadLinkUpdate": "https://github.com/Arceuid731/Splatoon/releases/download/preset-hub-v1.0.2/Splatoon-PresetHub-3.9.2.25.zip",
-		"DownloadLinkTesting": "https://github.com/Arceuid731/Splatoon/releases/download/preset-hub-v1.0.2/Splatoon-PresetHub-3.9.2.25.zip",
+		"DownloadLinkInstall": "https://github.com/Arceuid731/Splatoon/releases/download/preset-hub-v2.0.0/Splatoon-PresetHub-3.9.2.26.zip",
+		"DownloadLinkUpdate": "https://github.com/Arceuid731/Splatoon/releases/download/preset-hub-v2.0.0/Splatoon-PresetHub-3.9.2.26.zip",
+		"DownloadLinkTesting": "https://github.com/Arceuid731/Splatoon/releases/download/preset-hub-v2.0.0/Splatoon-PresetHub-3.9.2.26.zip",
 		"AcceptsFeedback": true,
 		"IconUrl": "https://love.puni.sh/resources/splatoon.png",
 		"DalamudApiLevel": 15

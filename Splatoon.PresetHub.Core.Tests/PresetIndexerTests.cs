@@ -10,8 +10,8 @@ public sealed class PresetIndexerTests
         var markdown = """
             # Duty
             ```
-            ~Lv2~{"Name":"First mechanic","Group":"Alexandria"}
-            ~Lv2~{"Name":"Second mechanic","Group":"Alexandria"}
+            ~Lv2~{"Name":"First mechanic","Group":"Alexandria","ZoneLockH":[1199]}
+            ~Lv2~{"Name":"Second mechanic","Group":"Alexandria","ZoneLockH":[1199,1200]}
             ```
             """;
 
@@ -24,6 +24,7 @@ public sealed class PresetIndexerTests
         Assert.Equal("Dawntrail", result[0].Expansion);
         Assert.Equal("Dungeons", result[0].Category);
         Assert.Equal("Alexandria", result[0].Duty);
+        Assert.Equal([1199u], result[0].TerritoryIds);
         Assert.StartsWith("~Lv2~", result[0].Content);
     }
 
@@ -34,6 +35,7 @@ public sealed class PresetIndexerTests
             namespace Sample.Duty;
             public class SafeTiles : SplatoonScript
             {
+                public override HashSet<uint>? ValidTerritories => [1199, 1200];
                 public override Metadata Metadata => new(1, author: "Yann");
             }
             """;
@@ -52,5 +54,6 @@ public sealed class PresetIndexerTests
         Assert.Equal("Yann", preset.Author);
         Assert.Equal("Dawntrail", preset.Expansion);
         Assert.Equal("Duties", preset.Category);
+        Assert.Equal([1199u, 1200u], preset.TerritoryIds);
     }
 }

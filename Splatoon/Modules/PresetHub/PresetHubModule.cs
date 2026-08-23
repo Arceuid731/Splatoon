@@ -1,3 +1,8 @@
+using Dalamud.Game.ClientState.Conditions;
+using Dalamud.Plugin.Services;
+using ECommons.GameHelpers.LegacyPlayer;
+using ECommons.SimpleGui;
+using Splatoon.Gui.PresetHub;
 using Splatoon.PresetHub.Core;
 
 namespace Splatoon.Modules.PresetHub;
@@ -9,6 +14,10 @@ internal sealed class PresetHubModule : IDisposable
     private readonly RepositorySyncService syncService;
     private readonly List<RepositoryDefinition> repositories;
     private readonly Dictionary<string, RepositorySnapshot> snapshots = [];
+    private readonly PresetHubDutyPromptWindow dutyPromptWindow;
+    private DutyPromptPreferences dutyPromptPreferences;
+    private uint pendingTerritory;
+    private long pendingTerritorySince;
 
     internal PresetHubInstaller Installer { get; }
     internal ScriptSecurityAnalyzer SecurityAnalyzer { get; } = new();
@@ -28,9 +37,17 @@ internal sealed class PresetHubModule : IDisposable
 
         syncService = new(new(P.HttpClient), new(), store);
         Installer = new(new(store));
+        dutyPromptPreferences = store.LoadDutyPromptPreferences();
+        dutyPromptWindow = new(this);
+        EzConfigGui.WindowSystem.AddWindow(dutyPromptWindow);
+        Svc.ClientState.TerritoryChanged += OnTerritoryChanged;
+        Svc.Framework.Update += OnFrameworkUpdate;
         Installer.CleanupStaleLayoutUi();
+        SchedulePrompt(Svc.ClientState.TerritoryType);
         _ = SyncAllAsync();
     }
+
+    internal DutyPromptPreferences DutyPromptPreferences => dutyPromptPreferences;
 
     internal IReadOnlyList<RepositoryDefinition> Repositories
     {
@@ -55,6 +72,55 @@ internal sealed class PresetHubModule : IDisposable
                     .ToArray();
             }
         }
+    }
+
+    internal IReadOnlyList<PresetEntry> GetDutySuggestions(uint territoryId) =>
+        DutyPresetMatcher.FindSuggestions(Presets, territoryId, Installer.GetStatus);
+
+    internal void SetDutyPromptsEnabled(bool enabled)
+    {
+        dutyPromptPreferences = dutyPromptPreferences with { Enabled = enabled };
+        store.SaveDutyPromptPreferences(dutyPromptPreferences);
+        if(!enabled) dutyPromptWindow.IsOpen = false;
+    }
+
+    internal void SetDutySuppressed(uint territoryId, bool suppressed)
+    {
+        var territories = dutyPromptPreferences.SuppressedTerritoryIds.ToHashSet();
+        if(suppressed) territories.Add(territoryId);
+        else territories.Remove(territoryId);
+        dutyPromptPreferences = dutyPromptPreferences with { SuppressedTerritoryIds = territories };
+        store.SaveDutyPromptPreferences(dutyPromptPreferences);
+        if(suppressed && dutyPromptWindow.TerritoryId == territoryId) dutyPromptWindow.IsOpen = false;
+    }
+
+    private void OnTerritoryChanged(uint territoryId)
+    {
+        dutyPromptWindow.IsOpen = false;
+        SchedulePrompt(territoryId);
+    }
+
+    private void SchedulePrompt(uint territoryId)
+    {
+        pendingTerritory = territoryId;
+        pendingTerritorySince = Environment.TickCount64;
+    }
+
+    private void OnFrameworkUpdate(IFramework framework)
+    {
+        if(pendingTerritory == 0 || IsSyncing || !dutyPromptPreferences.Enabled) return;
+        if(Environment.TickCount64 - pendingTerritorySince > 30_000 || Svc.ClientState.TerritoryType != pendingTerritory)
+        {
+            pendingTerritory = 0;
+            return;
+        }
+        if(!Svc.ClientState.IsLoggedIn || !Player.Available || !Svc.Condition[ConditionFlag.BoundByDuty]) return;
+
+        var territoryId = pendingTerritory;
+        pendingTerritory = 0;
+        if(dutyPromptPreferences.SuppressedTerritoryIds.Contains(territoryId)) return;
+        var suggestions = GetDutySuggestions(territoryId);
+        if(suggestions.Count > 0) dutyPromptWindow.Show(territoryId, suggestions);
     }
 
     internal async Task SyncAllAsync(bool force = false)
@@ -164,5 +230,9 @@ internal sealed class PresetHubModule : IDisposable
 
     public void Dispose()
     {
+        Svc.ClientState.TerritoryChanged -= OnTerritoryChanged;
+        Svc.Framework.Update -= OnFrameworkUpdate;
+        EzConfigGui.WindowSystem.RemoveWindow(dutyPromptWindow);
+        dutyPromptWindow.IsOpen = false;
     }
 }

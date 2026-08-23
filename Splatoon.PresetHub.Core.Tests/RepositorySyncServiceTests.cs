@@ -23,6 +23,7 @@ public sealed class RepositorySyncServiceTests : IDisposable
         var second = await service.SyncAsync(repository, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Single(first.Presets);
+        Assert.Equal(RepositorySyncService.CurrentIndexVersion, first.IndexVersion);
         Assert.Equal(first.Revision, second.Revision);
         Assert.Equal(2, handler.CommitRequests);
         Assert.Equal(1, handler.TreeRequests);

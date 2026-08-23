@@ -43,6 +43,12 @@ public sealed class PresetHubStore
     public void SaveInstallations(IEnumerable<InstallationRecord> installations) =>
         Save("installations.json", installations.ToArray());
 
+    public DutyPromptPreferences LoadDutyPromptPreferences() =>
+        Load<DutyPromptPreferences>("duty-prompt.json") ?? new();
+
+    public void SaveDutyPromptPreferences(DutyPromptPreferences preferences) =>
+        Save("duty-prompt.json", preferences);
+
     private T? Load<T>(string relativePath)
     {
         var path = GetPath(relativePath);

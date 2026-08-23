@@ -66,6 +66,7 @@ public sealed record PresetEntry
     public string Expansion { get; init; } = "";
     public string Category { get; init; } = "";
     public string Duty { get; init; } = "";
+    public IReadOnlyList<uint> TerritoryIds { get; init; } = [];
     public required string RelativePath { get; init; }
     public required string SourceUri { get; init; }
     public required string Content { get; init; }
@@ -73,8 +74,15 @@ public sealed record PresetEntry
     public string RuntimeIdentity { get; init; } = "";
 }
 
+public sealed record DutyPromptPreferences
+{
+    public bool Enabled { get; init; } = true;
+    public HashSet<uint> SuppressedTerritoryIds { get; init; } = [];
+}
+
 public sealed record RepositorySnapshot
 {
+    public int IndexVersion { get; init; }
     public required RepositoryDefinition Repository { get; init; }
     public required string Revision { get; init; }
     public required DateTimeOffset SyncedAt { get; init; }

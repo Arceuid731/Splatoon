@@ -1,4 +1,5 @@
 using Dalamud.Interface.Colors;
+using ECommons.ExcelServices;
 using ECommons.ImGuiMethods;
 using Splatoon.Modules.PresetHub;
 using Splatoon.PresetHub.Core;
@@ -42,8 +43,20 @@ internal static class TabPresetHub
                 DrawRepositories(hub);
                 ImGui.EndTabItem();
             }
+            if(ImGui.BeginTabItem("Duty prompts"))
+            {
+                DrawDutyPrompts(hub);
+                ImGui.EndTabItem();
+            }
             ImGui.EndTabBar();
         }
+    }
+
+    internal static void OpenScriptReview(PresetEntry preset)
+    {
+        reviewedScript = preset;
+        reviewReport = P.PresetHub.SecurityAnalyzer.Analyze(preset.Content);
+        reviewConfirmed = false;
     }
 
     private static void DrawBrowser(PresetHubModule hub, bool installedOnly)
@@ -271,6 +284,31 @@ internal static class TabPresetHub
             }
         }
         if(!string.IsNullOrWhiteSpace(repositoryError)) ImGuiEx.TextWrapped(ImGuiColors.DalamudRed, repositoryError);
+    }
+
+    private static void DrawDutyPrompts(PresetHubModule hub)
+    {
+        var preferences = hub.DutyPromptPreferences;
+        var enabled = preferences.Enabled;
+        if(ImGui.Checkbox("Suggest matching presets when entering a duty", ref enabled)) hub.SetDutyPromptsEnabled(enabled);
+        ImGuiEx.TextWrapped("The prompt only appears when Preset Hub finds a layout or script for the exact in-game territory and an install or update is available. Nothing is installed automatically.");
+
+        ImGui.Separator();
+        ImGui.TextUnformatted("Duties where suggestions are hidden");
+        if(preferences.SuppressedTerritoryIds.Count == 0)
+        {
+            ImGui.TextDisabled("None");
+            return;
+        }
+
+        foreach(var territoryId in preferences.SuppressedTerritoryIds.Order())
+        {
+            ImGui.PushID((int)territoryId);
+            ImGui.TextUnformatted(ExcelTerritoryHelper.GetName(territoryId, true));
+            ImGui.SameLine();
+            if(ImGui.SmallButton("Enable suggestions")) hub.SetDutySuppressed(territoryId, false);
+            ImGui.PopID();
+        }
     }
 
     private static void DrawNullableEnumCombo<T>(string label, ref T? value) where T : struct, Enum

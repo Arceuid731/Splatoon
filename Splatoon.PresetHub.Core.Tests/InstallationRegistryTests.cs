@@ -38,6 +38,22 @@ public sealed class InstallationRegistryTests : IDisposable
         if(Directory.Exists(directory)) Directory.Delete(directory, true);
     }
 
+    [Fact]
+    public void PersistsDutyPromptPreferences()
+    {
+        var store = new PresetHubStore(directory);
+        store.SaveDutyPromptPreferences(new()
+        {
+            Enabled = false,
+            SuppressedTerritoryIds = new HashSet<uint> { 837, 1199 },
+        });
+
+        var loaded = store.LoadDutyPromptPreferences();
+
+        Assert.False(loaded.Enabled);
+        Assert.Equal([837u, 1199u], loaded.SuppressedTerritoryIds.Order());
+    }
+
     private static PresetEntry CreatePreset(string hash) => new()
     {
         Id = "preset",
