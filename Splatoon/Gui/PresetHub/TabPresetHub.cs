@@ -12,6 +12,7 @@ internal static class TabPresetHub
     private static InstallationStatus? statusFilter;
     private static string expansionFilter = "";
     private static string categoryFilter = "";
+    private static string dutyFilter = "";
     private static PresetEntry? reviewedScript;
     private static ScriptSecurityReport? reviewReport;
     private static bool reviewConfirmed;
@@ -55,9 +56,17 @@ internal static class TabPresetHub
         DrawNullableEnumCombo("Status", ref statusFilter);
 
         var presets = hub.Presets;
-        DrawStringCombo("Expansion", ref expansionFilter, presets.Select(x => x.Expansion));
+        if(DrawStringCombo("Expansion", ref expansionFilter, presets.Select(x => x.Expansion)))
+        {
+            categoryFilter = "";
+            dutyFilter = "";
+        }
         ImGui.SameLine();
-        DrawStringCombo("Category", ref categoryFilter, presets.Select(x => x.Category));
+        var categoryPresets = presets.Where(x => expansionFilter.Length == 0 || x.Expansion == expansionFilter);
+        if(DrawStringCombo("Category", ref categoryFilter, categoryPresets.Select(x => x.Category))) dutyFilter = "";
+        ImGui.SameLine();
+        var dutyPresets = categoryPresets.Where(x => categoryFilter.Length == 0 || x.Category == categoryFilter);
+        DrawStringCombo("Duty", ref dutyFilter, dutyPresets.Select(x => x.Duty), 210f);
         ImGui.SameLine();
         if(ImGui.Button(hub.IsSyncing ? "Refreshing..." : "Refresh") && !hub.IsSyncing)
         {
@@ -68,20 +77,42 @@ internal static class TabPresetHub
         if(!string.IsNullOrWhiteSpace(actionMessage)) ImGuiEx.TextWrapped(ImGuiColors.DalamudYellow, actionMessage);
         ImGui.Separator();
 
-        var filtered = presets.Where(preset => Matches(preset, hub, installedOnly)).ToArray();
         if(ImGui.BeginTable("PresetHubBrowser", 6,
-               ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.Resizable | ImGuiTableFlags.ScrollY,
+               ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.Resizable | ImGuiTableFlags.ScrollY |
+               ImGuiTableFlags.Sortable | ImGuiTableFlags.SortTristate,
                new(0, reviewedScript == null ? 0 : 270f.Scale())))
         {
             ImGui.TableSetupScrollFreeze(0, 1);
             ImGui.TableSetupColumn("Preset", ImGuiTableColumnFlags.WidthStretch);
             ImGui.TableSetupColumn("Type", ImGuiTableColumnFlags.WidthFixed, 70f.Scale());
-            ImGui.TableSetupColumn("Content", ImGuiTableColumnFlags.WidthStretch);
+            ImGui.TableSetupColumn("Content", ImGuiTableColumnFlags.WidthStretch | ImGuiTableColumnFlags.DefaultSort);
             ImGui.TableSetupColumn("Repository", ImGuiTableColumnFlags.WidthFixed, 130f.Scale());
             ImGui.TableSetupColumn("Status", ImGuiTableColumnFlags.WidthFixed, 100f.Scale());
-            ImGui.TableSetupColumn("Action", ImGuiTableColumnFlags.WidthFixed, 145f.Scale());
+            ImGui.TableSetupColumn("Action", ImGuiTableColumnFlags.WidthFixed | ImGuiTableColumnFlags.NoSort, 190f.Scale());
             ImGui.TableHeadersRow();
 
+            var sortColumn = PresetSortColumn.Content;
+            var sortAscending = true;
+            if(ImGuiEx.TryGetTableSortDirection(out var requestedAscending, out var requestedColumn) && requestedColumn is >= 0 and <= 4)
+            {
+                sortColumn = (PresetSortColumn)requestedColumn;
+                sortAscending = requestedAscending;
+            }
+            var filtered = PresetQuery.Apply(
+                presets,
+                hub.Installer.GetStatus,
+                new()
+                {
+                    Search = search,
+                    Kind = kindFilter,
+                    Status = statusFilter,
+                    Expansion = expansionFilter,
+                    Category = categoryFilter,
+                    Duty = dutyFilter,
+                    InstalledOnly = installedOnly,
+                    SortColumn = sortColumn,
+                    SortAscending = sortAscending,
+                });
             foreach(var preset in filtered)
             {
                 DrawPresetRow(hub, preset);
@@ -111,6 +142,7 @@ internal static class TabPresetHub
         ImGui.TextUnformatted(status.ToString());
         ImGui.TableNextColumn();
 
+        var primaryActionDrawn = false;
         if(preset.Kind == PresetKind.Script)
         {
             if(ImGui.Button(status == InstallationStatus.UpdateAvailable ? "Review update" : "Review"))
@@ -119,15 +151,21 @@ internal static class TabPresetHub
                 reviewReport = hub.SecurityAnalyzer.Analyze(preset.Content);
                 reviewConfirmed = false;
             }
+            primaryActionDrawn = true;
         }
         else if(status != InstallationStatus.Installed && ImGui.Button(status == InstallationStatus.UpdateAvailable ? "Update" : "Install"))
         {
             hub.Installer.InstallLayout(preset, out actionMessage);
+            primaryActionDrawn = true;
+        }
+        else if(status != InstallationStatus.Installed)
+        {
+            primaryActionDrawn = true;
         }
 
         if(status != InstallationStatus.NotInstalled)
         {
-            if(preset.Kind == PresetKind.Script || status == InstallationStatus.Installed) ImGui.SameLine();
+            if(primaryActionDrawn) ImGui.SameLine();
             if(ImGui.Button("Uninstall")) hub.Installer.Uninstall(preset, out actionMessage);
         }
         ImGui.PopID();
@@ -235,20 +273,6 @@ internal static class TabPresetHub
         if(!string.IsNullOrWhiteSpace(repositoryError)) ImGuiEx.TextWrapped(ImGuiColors.DalamudRed, repositoryError);
     }
 
-    private static bool Matches(PresetEntry preset, PresetHubModule hub, bool installedOnly)
-    {
-        var status = hub.Installer.GetStatus(preset);
-        if(installedOnly && status == InstallationStatus.NotInstalled) return false;
-        if(kindFilter != null && preset.Kind != kindFilter) return false;
-        if(statusFilter != null && status != statusFilter) return false;
-        if(expansionFilter.Length > 0 && preset.Expansion != expansionFilter) return false;
-        if(categoryFilter.Length > 0 && preset.Category != categoryFilter) return false;
-        if(search.Length == 0) return true;
-
-        return new[] { preset.Title, preset.Author, preset.Duty, preset.Category, preset.Expansion, preset.RepositoryName }
-            .Any(value => value.Contains(search, StringComparison.OrdinalIgnoreCase));
-    }
-
     private static void DrawNullableEnumCombo<T>(string label, ref T? value) where T : struct, Enum
     {
         ImGui.SetNextItemWidth(120f.Scale());
@@ -263,17 +287,27 @@ internal static class TabPresetHub
         }
     }
 
-    private static void DrawStringCombo(string label, ref string value, IEnumerable<string> values)
+    private static bool DrawStringCombo(string label, ref string value, IEnumerable<string> values, float width = 150f)
     {
-        ImGui.SetNextItemWidth(150f.Scale());
+        var changed = false;
+        ImGui.SetNextItemWidth(width.Scale());
         if(ImGui.BeginCombo($"##{label}", value.Length == 0 ? label : value))
         {
-            if(ImGui.Selectable($"All {label.ToLowerInvariant()}", value.Length == 0)) value = "";
+            if(ImGui.Selectable($"All {label.ToLowerInvariant()}", value.Length == 0))
+            {
+                value = "";
+                changed = true;
+            }
             foreach(var option in values.Where(x => x.Length > 0).Distinct().Order())
             {
-                if(ImGui.Selectable(option, value == option)) value = option;
+                if(ImGui.Selectable(option, value == option))
+                {
+                    value = option;
+                    changed = true;
+                }
             }
             ImGui.EndCombo();
         }
+        return changed;
     }
 }

@@ -6,7 +6,7 @@ Preset Hub is an integrated, opt-in catalogue for Splatoon layouts and scripts. 
 
 - `Splatoon.PresetHub.Core` contains GitHub repository definitions, revision-aware synchronization, local JSON cache, `.md`/`.cs` indexing, installation records, search metadata, and Roslyn-based script review. It has no Dalamud dependency.
 - `Splatoon/Modules/PresetHub` adapts the core to Splatoon's existing `Utils.ImportLayouts` and `ScriptingProcessor.CompileAndLoad` pipelines.
-- `Splatoon/Gui/PresetHub` contains the Browse, Installed, and Repositories screens.
+- `Splatoon/Gui/PresetHub` contains the Browse, Installed, and Repositories screens, including cascading expansion/category/duty filters and sortable data columns.
 
 Only three small hooks exist outside those folders: one project reference, module lifecycle initialization/disposal, and one configuration tab. This is deliberate so merges from `PunishXIV/Splatoon` remain straightforward.
 

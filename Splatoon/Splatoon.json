@@ -11,9 +11,9 @@
 		"RepoUrl": "https://github.com/Arceuid731/Splatoon",
 		"ApplicableVersion": "any",
 		"LastUpdate": 1684437468,
-		"DownloadLinkInstall": "https://github.com/Arceuid731/Splatoon/releases/download/preset-hub-v1.0.0/Splatoon-PresetHub-3.9.2.23.zip",
-		"DownloadLinkUpdate": "https://github.com/Arceuid731/Splatoon/releases/download/preset-hub-v1.0.0/Splatoon-PresetHub-3.9.2.23.zip",
-		"DownloadLinkTesting": "https://github.com/Arceuid731/Splatoon/releases/download/preset-hub-v1.0.0/Splatoon-PresetHub-3.9.2.23.zip",
+		"DownloadLinkInstall": "https://github.com/Arceuid731/Splatoon/releases/download/preset-hub-v1.0.1/Splatoon-PresetHub-3.9.2.24.zip",
+		"DownloadLinkUpdate": "https://github.com/Arceuid731/Splatoon/releases/download/preset-hub-v1.0.1/Splatoon-PresetHub-3.9.2.24.zip",
+		"DownloadLinkTesting": "https://github.com/Arceuid731/Splatoon/releases/download/preset-hub-v1.0.1/Splatoon-PresetHub-3.9.2.24.zip",
 		"AcceptsFeedback": true,
 		"IconUrl": "https://love.puni.sh/resources/splatoon.png",
 		"DalamudApiLevel": 15
