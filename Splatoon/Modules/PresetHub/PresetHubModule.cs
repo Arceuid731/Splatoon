@@ -28,6 +28,7 @@ internal sealed class PresetHubModule : IDisposable
 
         syncService = new(new(P.HttpClient), new(), store);
         Installer = new(new(store));
+        Installer.CleanupStaleLayoutUi();
         _ = SyncAllAsync();
     }
 

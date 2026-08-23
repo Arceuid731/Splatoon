@@ -1,4 +1,5 @@
 using ECommons;
+using Splatoon.ConfigGui.CGuiLayouts;
 using Splatoon.PresetHub.Core;
 using Splatoon.SplatoonScripting;
 using Splatoon.Utility;
@@ -10,6 +11,27 @@ internal sealed class PresetHubInstaller(InstallationRegistry registry)
     internal IReadOnlyCollection<InstallationRecord> Records => registry.Records;
 
     internal InstallationStatus GetStatus(PresetEntry preset) => registry.GetStatus(preset);
+
+    internal void CleanupStaleLayoutUi()
+    {
+        var validGroups = P.Config.LayoutsL
+            .Select(x => x.Group)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .ToHashSet(StringComparer.Ordinal);
+        var staleGroups = P.Config.GroupOrder.Where(x => !validGroups.Contains(x)).ToArray();
+        var changed = P.Config.GroupOrder.RemoveAll(x => staleGroups.Contains(x)) > 0;
+        foreach(var group in staleGroups)
+        {
+            changed |= P.Config.DisabledGroups.Remove(group);
+            CGui.OpenedGroup.Remove(group);
+        }
+        if(LayoutDrawSelector.CurrentLayout != null && !P.Config.LayoutsL.Contains(LayoutDrawSelector.CurrentLayout))
+        {
+            LayoutDrawSelector.CurrentLayout = null;
+            LayoutDrawSelector.CurrentElement = null;
+        }
+        if(changed) P.Config.Save();
+    }
 
     internal bool InstallLayout(PresetEntry preset, out string message)
     {
@@ -26,6 +48,9 @@ internal sealed class PresetHubInstaller(InstallationRegistry registry)
             return false;
         }
 
+        LayoutDrawSelector.CurrentLayout = imported[^1];
+        LayoutDrawSelector.CurrentElement = null;
+        foreach(var group in imported.Select(x => x.Group).Where(x => !string.IsNullOrWhiteSpace(x))) CGui.OpenedGroup.Add(group);
         var runtimeIdentity = string.Join('\n', imported.Select(x => x.Name));
         registry.MarkInstalled(preset, runtimeIdentity);
         P.Config.Save();
@@ -64,7 +89,20 @@ internal sealed class PresetHubInstaller(InstallationRegistry registry)
         if(record.Kind == PresetKind.Layout)
         {
             var names = SplitRuntimeIdentity(record.RuntimeIdentity);
-            var removed = P.Config.LayoutsL.RemoveAll(x => names.Contains(x.Name));
+            var removedLayouts = P.Config.LayoutsL.Where(x => names.Contains(x.Name)).ToArray();
+            var removedGroups = removedLayouts.Select(x => x.Group).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct().ToArray();
+            var removed = P.Config.LayoutsL.RemoveAll(x => removedLayouts.Contains(x));
+            if(removedLayouts.Contains(LayoutDrawSelector.CurrentLayout))
+            {
+                LayoutDrawSelector.CurrentLayout = null;
+                LayoutDrawSelector.CurrentElement = null;
+            }
+            foreach(var group in removedGroups.Where(group => P.Config.LayoutsL.All(x => x.Group != group)))
+            {
+                P.Config.GroupOrder.RemoveAll(x => x == group);
+                P.Config.DisabledGroups.Remove(group);
+                CGui.OpenedGroup.Remove(group);
+            }
             P.Config.Save();
             registry.Remove(preset.Id);
             message = $"Removed {removed} managed layout(s).";
