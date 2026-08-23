@@ -1,6 +1,6 @@
 # Custom Dalamud repository preparation
 
-No release or install endpoint is published by this repository yet. The files under `distribution/` only prepare a future custom repository after explicit approval.
+A public prerelease package is available for direct in-game testing. It remains separate from any official Dalamud submission or PunishXIV release.
 
 Once the test release is published, the custom repository URL is:
 
