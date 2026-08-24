@@ -1,8 +1,8 @@
 {
 		"Author": "NightmareXIV; Preset Hub integration by Arceuid731",
 		"Name": "Splatoon (Preset Hub)",
-		"Punchline": "Splatoon with contextual, review-first duty presets.",
-		"Description": "A custom Splatoon build with Preset Hub V2: repository browsing, exact duty-entry suggestions, remembered choices, managed layout installation/update/removal, and explicit C# security review.",
+		"Punchline": "Splatoon with curated, comparable duty presets.",
+		"Description": "A custom Splatoon build with Preset Hub V2.1.1: repository browsing, grouped variant comparison and choice, exact duty-entry suggestions, managed installation, and explicit C# security review.",
 		"Tags": [
 				"Utility",
 				"Accessibility"
