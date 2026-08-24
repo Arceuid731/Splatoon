@@ -50,6 +50,7 @@ internal sealed class PresetHubInstaller(InstallationRegistry registry)
     internal bool InstallLayoutChoice(PresetEntry family, PresetEntry choice, out string message)
     {
         var installedChoice = GetInstalledChoice(family);
+        var choiceStatus = GetStatus(choice);
         var previousRecord = installedChoice == null ? registry.Find(choice) : registry.Find(installedChoice);
         var previousNames = SplitRuntimeIdentity(previousRecord?.RuntimeIdentity);
         var previousLayouts = P.Config.LayoutsL.Where(x => previousNames.Contains(x.Name)).ToArray();
@@ -71,10 +72,32 @@ internal sealed class PresetHubInstaller(InstallationRegistry registry)
         registry.MarkInstalled(choice, runtimeIdentity);
         P.Config.Save();
         CleanupStaleLayoutUi();
-        message = installedChoice != null && installedChoice.Id != choice.Id
-            ? $"Replaced {installedChoice.RepositoryName} with {choice.RepositoryName}."
-            : $"Installed {imported.Count} layout(s).";
+        message = installedChoice == null
+            ? $"Installed {imported.Count} layout(s)."
+            : installedChoice.Id != choice.Id
+                ? $"Replaced {installedChoice.RepositoryName} with {choice.RepositoryName}."
+                : choiceStatus == InstallationStatus.UpdateAvailable
+                    ? $"Updated {choice.RepositoryName}."
+                    : $"Reinstalled {imported.Count} layout(s).";
         return true;
+    }
+
+    internal PresetHubBatchInstallResult InstallLayoutChoices(IEnumerable<PresetHubLayoutSelection> selections)
+    {
+        var requests = selections.GroupBy(x => x.Family.Id, StringComparer.Ordinal).Select(x => x.Last()).ToArray();
+        var failures = new List<string>();
+        var succeeded = 0;
+        foreach(var request in requests)
+        {
+            if(request.Choice.Kind != PresetKind.Layout)
+            {
+                failures.Add($"{request.Family.Title}: scripts require a separate security review");
+                continue;
+            }
+            if(InstallLayoutChoice(request.Family, request.Choice, out var message)) succeeded++;
+            else failures.Add($"{request.Family.Title}: {message}");
+        }
+        return new(succeeded, requests.Length - succeeded, failures);
     }
 
     internal bool InstallReviewedScript(PresetEntry preset, ScriptSecurityReport report, out string message)
@@ -173,4 +196,13 @@ internal sealed class PresetHubInstaller(InstallationRegistry registry)
 
     private static IReadOnlyList<PresetEntry> Choices(PresetEntry family) =>
         family.Variants.Count > 0 ? family.Variants : [family];
+}
+
+internal sealed record PresetHubLayoutSelection(PresetEntry Family, PresetEntry Choice);
+
+internal sealed record PresetHubBatchInstallResult(int Succeeded, int Failed, IReadOnlyList<string> Failures)
+{
+    internal string Message => Failed == 0
+        ? $"Installed or updated {Succeeded} selected preset(s)."
+        : $"Installed or updated {Succeeded} preset(s); {Failed} failed. {string.Join(" | ", Failures)}";
 }

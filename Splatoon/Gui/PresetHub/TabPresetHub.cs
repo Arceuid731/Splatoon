@@ -55,6 +55,7 @@ internal static class TabPresetHub
 
     internal static void OpenScriptReview(PresetEntry preset)
     {
+        selectedFamily = null;
         reviewedScript = preset;
         reviewReport = P.PresetHub.SecurityAnalyzer.Analyze(preset.Content);
         reviewConfirmed = false;
@@ -102,7 +103,7 @@ internal static class TabPresetHub
         if(ImGui.BeginTable("PresetHubBrowser", 6,
                ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.Resizable | ImGuiTableFlags.ScrollY |
                ImGuiTableFlags.Sortable | ImGuiTableFlags.SortTristate,
-               new(0, reviewedScript == null ? 0 : 270f.Scale())))
+               new(0, reviewedScript == null && selectedFamily == null ? 0 : 300f.Scale())))
         {
             ImGui.TableSetupScrollFreeze(0, 1);
             ImGui.TableSetupColumn("Preset", ImGuiTableColumnFlags.WidthStretch);
@@ -218,75 +219,8 @@ internal static class TabPresetHub
 
     private static void DrawVariantPicker(PresetHubModule hub, PresetEntry family)
     {
-        var choices = family.Variants.Count > 0 ? family.Variants : [family];
-        var recommended = choices[0];
-        var installed = hub.Installer.GetInstalledChoice(family);
         ImGui.Separator();
-        ImGui.TextUnformatted($"Choose a version: {family.Title}");
-        ImGuiEx.TextWrapped("Versions share the same duty and normalized preset name, but their actual overlay content differs. " +
-                            "The recommendation favors compatibility, territory metadata, language-independent matching, and source confidence.");
-
-        if(ImGui.BeginTable("PresetHubVariantPicker", 6,
-               ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.Resizable | ImGuiTableFlags.ScrollY,
-               new(0, Math.Min(330f.Scale(), (choices.Count + 1) * 95f.Scale()))))
-        {
-            ImGui.TableSetupColumn("Version", ImGuiTableColumnFlags.WidthFixed, 155f.Scale());
-            ImGui.TableSetupColumn("Confidence", ImGuiTableColumnFlags.WidthFixed, 145f.Scale());
-            ImGui.TableSetupColumn("Contains", ImGuiTableColumnFlags.WidthFixed, 160f.Scale());
-            ImGui.TableSetupColumn("Compared with recommended", ImGuiTableColumnFlags.WidthStretch);
-            ImGui.TableSetupColumn("Compatibility", ImGuiTableColumnFlags.WidthFixed, 145f.Scale());
-            ImGui.TableSetupColumn("Action", ImGuiTableColumnFlags.WidthFixed, 100f.Scale());
-            ImGui.TableHeadersRow();
-            foreach(var choice in choices)
-            {
-                ImGui.PushID($"variant-{choice.Id}");
-                ImGui.TableNextRow();
-                ImGui.TableNextColumn();
-                ImGui.TextUnformatted(choice.RepositoryName);
-                if(choice.Id == recommended.Id) ImGui.TextColored(ImGuiColors.HealerGreen, "Recommended");
-                if(choice.Sources.Count > 1) ImGui.TextDisabled($"Also in {choice.Sources.Count - 1} mirror(s)");
-                ImGui.TextDisabled(choice.RelativePath);
-
-                ImGui.TableNextColumn();
-                ImGui.TextUnformatted($"{choice.ConfidenceScore}/100");
-                foreach(var note in choice.ConfidenceNotes.Take(3)) ImGui.TextDisabled(note);
-
-                ImGui.TableNextColumn();
-                ImGui.TextUnformatted(PresetVariantComparison.ContentSummary(choice));
-                foreach(var name in choice.Summary.ElementNames.Take(3)) ImGui.TextDisabled(name);
-                if(choice.Summary.ElementNames.Count > 3) ImGui.TextDisabled($"+{choice.Summary.ElementNames.Count - 3} more");
-
-                ImGui.TableNextColumn();
-                foreach(var difference in PresetVariantComparison.DescribeDifferences(choice, recommended))
-                    ImGui.TextDisabled(difference);
-
-                ImGui.TableNextColumn();
-                ImGui.TextUnformatted(choice.Compatibility.ToString());
-                ImGui.TextDisabled(choice.Format.ToString());
-                if(choice.LanguageDependent) ImGui.TextColored(ImGuiColors.DalamudYellow, "Language-dependent");
-
-                ImGui.TableNextColumn();
-                var isInstalled = installed != null && installed.Id == choice.Id;
-                if(isInstalled)
-                {
-                    ImGui.TextColored(ImGuiColors.HealerGreen, "Installed");
-                }
-                else if(choice.Kind == PresetKind.Script)
-                {
-                    if(installed != null)
-                    {
-                        if(ImGui.Button("Uninstall first")) hub.Installer.UninstallFamily(family, out actionMessage);
-                    }
-                    else if(ImGui.Button("Review")) OpenScriptReview(choice);
-                }
-                else if(ImGui.Button(installed == null ? "Install" : "Replace"))
-                {
-                    hub.Installer.InstallLayoutChoice(family, choice, out actionMessage);
-                }
-                ImGui.PopID();
-            }
-            ImGui.EndTable();
-        }
+        PresetVariantSelector.DrawInstaller(hub, family, "PresetHubVariantPicker", ref actionMessage, OpenScriptReview);
 
         if(ImGui.Button("Close choices")) selectedFamily = null;
     }

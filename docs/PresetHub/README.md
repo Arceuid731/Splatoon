@@ -20,6 +20,8 @@ Only three small hooks exist outside those folders: one project reference, modul
 - Exact layouts are collapsed by canonical content. Original sources are preferred over aggregators; mirrors remain visible as provenance. Differing layouts in the same conservative family share one browser row and open a choice panel.
 - The choice panel recommends the strongest compatible candidate while showing every version's source, confidence reasons, format, language risk, element/trigger/ID counts, and human-readable differences in geometry, matching, and visual styling.
 - Installing another layout version performs an explicit transactional replacement: the installed managed version is restored if Splatoon rejects the new one.
+- The browser and duty-entry prompt use the same variant selector. Duty suggestions preselect recommended layout versions, allow per-family comparison and choice, and install several selected presets with one confirmation. Partial failures remain selected and are reported individually.
+- C# scripts are shown in duty suggestions but never included in batch installation; each exact source hash still requires its separate security review.
 - Confidence reflects provenance, exact territory metadata, format, compatibility, and possible language-dependent actor/trigger matching. It does not claim that one mechanic solution is objectively better.
 - Layouts are imported through Splatoon's existing importer and tracked by their installed layout names.
 - Scripts are never installed directly from a URL. Preset Hub analyses and displays the exact cached source and SHA-256 hash, requires an explicit confirmation, then passes those same bytes to Splatoon's compiler.
