@@ -30,7 +30,9 @@ public sealed class InstallationRegistryTests : IDisposable
 
         var repositories = new PresetHubStore(directory).LoadRepositories();
 
-        Assert.Equal("punishxiv-splatoon", Assert.Single(repositories).Id);
+        Assert.Equal(9, repositories.Count);
+        Assert.Equal("punishxiv-splatoon", repositories[0].Id);
+        Assert.Equal(5, repositories.Count(x => x.Enabled));
     }
 
     public void Dispose()
@@ -52,6 +54,22 @@ public sealed class InstallationRegistryTests : IDisposable
 
         Assert.False(loaded.Enabled);
         Assert.Equal([837u, 1199u], loaded.SuppressedTerritoryIds.Order());
+    }
+
+    [Fact]
+    public void RecognizesAnInstalledExactDuplicateThroughItsSourceAlias()
+    {
+        var registry = new InstallationRegistry(new PresetHubStore(directory));
+        var mirror = CreatePreset("raw-a") with { Id = "mirror", Fingerprint = "canonical" };
+        registry.MarkInstalled(mirror, "Layout");
+        var preferred = CreatePreset("raw-b") with
+        {
+            Id = "original",
+            Fingerprint = "canonical",
+            AlternatePresetIds = ["mirror"],
+        };
+
+        Assert.Equal(InstallationStatus.Installed, registry.GetStatus(preferred));
     }
 
     private static PresetEntry CreatePreset(string hash) => new()

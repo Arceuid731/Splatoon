@@ -4,6 +4,7 @@ namespace Splatoon.PresetHub.Core;
 
 public sealed class PresetHubStore
 {
+    private const int CurrentCuratedCatalogVersion = 1;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         WriteIndented = true,
@@ -20,10 +21,37 @@ public sealed class PresetHubStore
     public IReadOnlyList<RepositoryDefinition> LoadRepositories()
     {
         var repositories = Load<List<RepositoryDefinition>>("repositories.json") ?? [];
-        if(repositories.Count == 0)
+        var catalogVersion = Load<int?>("repository-catalog-version.json") ?? 0;
+        if(catalogVersion < CurrentCuratedCatalogVersion)
         {
-            repositories.Add(RepositoryDefinition.OfficialSplatoon());
+            foreach(var curated in RepositoryDefinition.CuratedCatalog())
+            {
+                var existingIndex = repositories.FindIndex(x =>
+                    x.Id.Equals(curated.Id, StringComparison.OrdinalIgnoreCase) ||
+                    x.FullName.Equals(curated.FullName, StringComparison.OrdinalIgnoreCase));
+                if(existingIndex < 0)
+                {
+                    repositories.Add(curated);
+                }
+                else
+                {
+                    var existing = repositories[existingIndex];
+                    repositories[existingIndex] = curated with
+                    {
+                        Id = existing.Id,
+                        Enabled = existing.Enabled,
+                        Ref = existing.Ref,
+                        PathPrefixes = existing.PathPrefixes.Count == 0 && curated.PathPrefixes.Count > 0
+                            ? curated.PathPrefixes
+                            : existing.PathPrefixes,
+                        ExcludedPathPrefixes = existing.ExcludedPathPrefixes.Count == 0
+                            ? curated.ExcludedPathPrefixes
+                            : existing.ExcludedPathPrefixes,
+                    };
+                }
+            }
             SaveRepositories(repositories);
+            Save("repository-catalog-version.json", CurrentCuratedCatalogVersion);
         }
         return repositories;
     }

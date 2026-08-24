@@ -63,7 +63,11 @@ internal sealed class PresetHubDutyPromptWindow(PresetHubModule hub) : Window(
                 }
                 ImGui.TableNextColumn();
                 ImGui.TextUnformatted(preset.Title);
-                ImGui.TextDisabled(preset.RepositoryName);
+                var detail = $"{preset.RepositoryName} · confidence {preset.ConfidenceScore}/100";
+                if(preset.VariantCount > 1) detail += $" · {preset.VariantCount} versions";
+                if(preset.Sources.Count > 1) detail += $" · {preset.Sources.Count} sources";
+                ImGui.TextDisabled(detail);
+                if(preset.LanguageDependent) ImGui.TextColored(ImGuiColors.DalamudYellow, "May depend on client language");
                 ImGui.TableNextColumn();
                 ImGui.TextColored(preset.Kind == PresetKind.Script ? ImGuiColors.DalamudYellow : ImGuiColors.HealerGreen,
                     preset.Kind.ToString());

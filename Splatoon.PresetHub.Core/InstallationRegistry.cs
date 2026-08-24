@@ -15,13 +15,25 @@ public sealed class InstallationRegistry
 
     public InstallationStatus GetStatus(PresetEntry preset)
     {
-        if(!records.TryGetValue(preset.Id, out var record)) return InstallationStatus.NotInstalled;
-        return record.ContentHash == preset.ContentHash
+        var record = Find(preset);
+        if(record == null) return InstallationStatus.NotInstalled;
+        return record.ContentHash == preset.ContentHash ||
+               (preset.Fingerprint.Length > 0 && record.Fingerprint == preset.Fingerprint)
             ? InstallationStatus.Installed
             : InstallationStatus.UpdateAvailable;
     }
 
     public InstallationRecord? Find(string presetId) => records.GetValueOrDefault(presetId);
+
+    public InstallationRecord? Find(PresetEntry preset)
+    {
+        if(records.TryGetValue(preset.Id, out var direct)) return direct;
+        foreach(var alias in preset.AlternatePresetIds)
+        {
+            if(records.TryGetValue(alias, out var alternate)) return alternate;
+        }
+        return null;
+    }
 
     public void MarkInstalled(PresetEntry preset, string runtimeIdentity)
     {
@@ -30,6 +42,7 @@ public sealed class InstallationRegistry
             PresetId = preset.Id,
             Kind = preset.Kind,
             ContentHash = preset.ContentHash,
+            Fingerprint = preset.Fingerprint,
             RuntimeIdentity = runtimeIdentity,
             RepositoryName = preset.RepositoryName,
             SourceUri = preset.SourceUri,
@@ -41,6 +54,13 @@ public sealed class InstallationRegistry
     public void Remove(string presetId)
     {
         if(records.Remove(presetId)) Save();
+    }
+
+    public void Remove(PresetEntry preset)
+    {
+        var removed = records.Remove(preset.Id);
+        foreach(var alias in preset.AlternatePresetIds) removed |= records.Remove(alias);
+        if(removed) Save();
     }
 
     private void Save() => store.SaveInstallations(records.Values.OrderBy(x => x.InstalledAt));

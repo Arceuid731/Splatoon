@@ -1,7 +1,9 @@
 using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Plugin.Services;
 using ECommons.GameHelpers.LegacyPlayer;
+using ECommons.ExcelServices;
 using ECommons.SimpleGui;
+using Lumina.Excel.Sheets;
 using Splatoon.Gui.PresetHub;
 using Splatoon.PresetHub.Core;
 
@@ -14,6 +16,8 @@ internal sealed class PresetHubModule : IDisposable
     private readonly RepositorySyncService syncService;
     private readonly List<RepositoryDefinition> repositories;
     private readonly Dictionary<string, RepositorySnapshot> snapshots = [];
+    private IReadOnlyList<PresetEntry> catalog = [];
+    private bool catalogDirty = true;
     private readonly PresetHubDutyPromptWindow dutyPromptWindow;
     private DutyPromptPreferences dutyPromptPreferences;
     private uint pendingTerritory;
@@ -63,13 +67,15 @@ internal sealed class PresetHubModule : IDisposable
         {
             lock(gate)
             {
-                return snapshots.Values
+                if(!catalogDirty) return catalog;
+                var enabledIds = repositories.Where(x => x.Enabled).Select(x => x.Id).ToHashSet(StringComparer.Ordinal);
+                var indexed = snapshots.Values
+                    .Where(x => enabledIds.Contains(x.Repository.Id))
                     .SelectMany(x => x.Presets)
-                    .OrderBy(x => x.Expansion)
-                    .ThenBy(x => x.Category)
-                    .ThenBy(x => x.Duty)
-                    .ThenBy(x => x.Title)
                     .ToArray();
+                catalog = PresetCatalog.Build(indexed).Select(ResolveTerritoryMetadata).ToArray();
+                catalogDirty = false;
+                return catalog;
             }
         }
     }
@@ -140,7 +146,11 @@ internal sealed class PresetHubModule : IDisposable
                 try
                 {
                     var snapshot = await syncService.SyncAsync(repository, force).ConfigureAwait(false);
-                    lock(gate) snapshots[repository.Id] = snapshot;
+                    lock(gate)
+                    {
+                        snapshots[repository.Id] = snapshot;
+                        catalogDirty = true;
+                    }
                 }
                 catch(Exception exception)
                 {
@@ -154,8 +164,12 @@ internal sealed class PresetHubModule : IDisposable
             lock(gate)
             {
                 IsSyncing = false;
+                var enabledIds = repositories.Where(x => x.Enabled).Select(x => x.Id).ToHashSet(StringComparer.Ordinal);
+                var rawPresets = snapshots.Values.Where(x => enabledIds.Contains(x.Repository.Id)).SelectMany(x => x.Presets).ToArray();
+                var catalogCount = PresetCatalog.Build(rawPresets).Count;
+                var collapsedCount = rawPresets.Length - catalogCount;
                 LastMessage = errors.Count == 0
-                    ? $"Index ready: {snapshots.Values.Sum(x => x.Presets.Count)} presets."
+                    ? $"Index ready: {catalogCount} presets ({collapsedCount} duplicate copies collapsed)."
                     : $"Cache kept; refresh failed for {errors.Count} repository(s): {string.Join(" | ", errors)}";
             }
         }
@@ -214,8 +228,10 @@ internal sealed class PresetHubModule : IDisposable
             var index = repositories.FindIndex(x => x.Id == repositoryId);
             if(index < 0) return;
             repositories[index] = repositories[index] with { Enabled = enabled };
+            catalogDirty = true;
             store.SaveRepositories(repositories);
         }
+        if(enabled) _ = SyncAllAsync(force: true);
     }
 
     internal void RemoveRepository(string repositoryId)
@@ -224,6 +240,7 @@ internal sealed class PresetHubModule : IDisposable
         {
             repositories.RemoveAll(x => x.Id == repositoryId);
             snapshots.Remove(repositoryId);
+            catalogDirty = true;
             store.SaveRepositories(repositories);
         }
     }
@@ -234,5 +251,29 @@ internal sealed class PresetHubModule : IDisposable
         Svc.Framework.Update -= OnFrameworkUpdate;
         EzConfigGui.WindowSystem.RemoveWindow(dutyPromptWindow);
         dutyPromptWindow.IsOpen = false;
+    }
+
+    private static PresetEntry ResolveTerritoryMetadata(PresetEntry preset)
+    {
+        if(preset.TerritoryIds.Count != 1) return preset;
+        try
+        {
+            var territory = Svc.Data.GetExcelSheet<TerritoryType>().GetRowOrDefault(preset.TerritoryIds[0]);
+            var content = territory?.ContentFinderCondition.ValueNullable;
+            var duty = content?.Name.ToString();
+            var expansion = territory?.ExVersion.ValueNullable?.Name.ToString();
+            var category = content?.ContentType.ValueNullable?.Name.ToString();
+            duty = string.IsNullOrWhiteSpace(duty) ? ExcelTerritoryHelper.GetName(preset.TerritoryIds[0], true) : duty;
+            return preset with
+            {
+                Duty = string.IsNullOrWhiteSpace(duty) ? preset.Duty : duty,
+                Expansion = string.IsNullOrWhiteSpace(expansion) ? preset.Expansion : expansion,
+                Category = string.IsNullOrWhiteSpace(category) ? preset.Category : category,
+            };
+        }
+        catch
+        {
+            return preset;
+        }
     }
 }

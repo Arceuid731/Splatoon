@@ -5,7 +5,7 @@ public sealed class RepositorySyncService(
     PresetIndexer indexer,
     PresetHubStore store)
 {
-    public const int CurrentIndexVersion = 2;
+    public const int CurrentIndexVersion = 3;
 
     public async Task<RepositorySnapshot> SyncAsync(
         RepositoryDefinition repository,

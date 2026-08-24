@@ -6,6 +6,10 @@ namespace Splatoon.PresetHub.Core;
 public sealed class GitHubRepositoryClient(HttpClient httpClient)
 {
     private const int MaxFileBytes = 2 * 1024 * 1024;
+    private static readonly HashSet<string> TextExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".md", ".txt", ".json", ".yaml", ".yml", ".cfg", ".conf", ".preset", "",
+    };
     private readonly HttpClient httpClient = Configure(httpClient);
 
     public async Task<string> GetRevisionAsync(
@@ -42,8 +46,7 @@ public sealed class GitHubRepositoryClient(HttpClient httpClient)
             .Where(item => !item.TryGetProperty("size", out var size) || size.GetInt64() <= MaxFileBytes)
             .Select(item => item.GetProperty("path").GetString())
             .OfType<string>()
-            .Where(path => path.EndsWith(".md", StringComparison.OrdinalIgnoreCase) ||
-                           path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
+            .Where(IsIndexable)
             .Where(path => repository.PathPrefixes.Count == 0 || repository.PathPrefixes.Any(prefix =>
                 path.StartsWith(prefix.TrimStart('/').Replace('\\', '/'), StringComparison.OrdinalIgnoreCase)))
             .Where(path => !repository.ExcludedPathPrefixes.Any(prefix =>
@@ -67,6 +70,9 @@ public sealed class GitHubRepositoryClient(HttpClient httpClient)
         });
         return await Task.WhenAll(downloads).ConfigureAwait(false);
     }
+
+    private static bool IsIndexable(string path) =>
+        path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase) || TextExtensions.Contains(Path.GetExtension(path));
 
     private static HttpClient Configure(HttpClient client)
     {

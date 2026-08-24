@@ -19,7 +19,7 @@ internal static class TabPresetHub
     private static bool reviewConfirmed;
     private static string repositoryInput = "";
     private static string referenceInput = "main";
-    private static string pathsInput = "Presets/;SplatoonScripts/";
+    private static string pathsInput = "";
     private static string repositoryError = "";
     private static string actionMessage = "";
 
@@ -144,13 +144,26 @@ internal static class TabPresetHub
         ImGui.TableNextColumn();
         ImGui.TextUnformatted(preset.Title);
         if(!string.IsNullOrWhiteSpace(preset.Author)) ImGui.TextDisabled(preset.Author);
+        var variantLabel = preset.VariantCount > 1 ? $" · {preset.VariantCount} versions" : "";
+        ImGui.TextDisabled($"Confidence {preset.ConfidenceScore}/100{variantLabel}");
+        if(preset.LanguageDependent) ImGui.TextColored(ImGuiColors.DalamudYellow, "May depend on client language");
+        if(preset.Format == PresetFormat.LegacyLayout) ImGui.TextDisabled("Legacy layout format");
         ImGui.TableNextColumn();
         ImGui.TextColored(preset.Kind == PresetKind.Script ? ImGuiColors.DalamudYellow : ImGuiColors.HealerGreen, preset.Kind.ToString());
+        if(preset.Kind == PresetKind.Script && preset.Compatibility != PresetCompatibility.Compatible)
+        {
+            ImGui.TextColored(preset.Compatibility == PresetCompatibility.Incompatible
+                    ? ImGuiColors.DalamudRed
+                    : ImGuiColors.DalamudYellow,
+                preset.Compatibility.ToString());
+        }
         ImGui.TableNextColumn();
         ImGui.TextUnformatted(string.Join(" / ", new[] { preset.Expansion, preset.Category, preset.Duty }.Where(x => x.Length > 0)));
         ImGui.TableNextColumn();
         ImGui.TextUnformatted(preset.RepositoryName);
-        ImGui.TextDisabled(preset.Trust.ToString());
+        ImGui.TextDisabled(preset.Sources.Count > 1
+            ? $"{preset.Trust} · {preset.Sources.Count - 1} mirror(s) collapsed"
+            : preset.Trust.ToString());
         ImGui.TableNextColumn();
         ImGui.TextUnformatted(status.ToString());
         ImGui.TableNextColumn();
@@ -191,6 +204,11 @@ internal static class TabPresetHub
         ImGuiEx.TextWrapped(ImGuiColors.DalamudYellow,
             "C# scripts run with Splatoon's access. Static analysis reduces surprises but cannot prove that a script is safe.");
         ImGui.TextUnformatted($"Source: {preset.RepositoryName} ({preset.Trust})");
+        ImGui.TextUnformatted($"Compatibility: {preset.Compatibility}");
+        if(!string.IsNullOrWhiteSpace(preset.CompatibilityDetail))
+            ImGuiEx.TextWrapped(preset.Compatibility == PresetCompatibility.Incompatible
+                ? ImGuiColors.DalamudRed
+                : ImGuiColors.DalamudYellow, preset.CompatibilityDetail);
         ImGui.TextUnformatted($"SHA-256: {report.ContentHash}");
 
         foreach(var finding in report.Findings)
@@ -215,7 +233,8 @@ internal static class TabPresetHub
         }
 
         ImGui.Checkbox("I reviewed this exact hash and accept running it", ref reviewConfirmed);
-        if(!reviewConfirmed) ImGui.BeginDisabled();
+        var installationBlocked = !reviewConfirmed || preset.Compatibility == PresetCompatibility.Incompatible;
+        if(installationBlocked) ImGui.BeginDisabled();
         if(ImGui.Button(hub.Installer.GetStatus(preset) == InstallationStatus.UpdateAvailable ? "Install reviewed update" : "Install reviewed script"))
         {
             hub.Installer.InstallReviewedScript(preset, report, out actionMessage);
@@ -223,7 +242,7 @@ internal static class TabPresetHub
             reviewReport = null;
             reviewConfirmed = false;
         }
-        if(!reviewConfirmed) ImGui.EndDisabled();
+        if(installationBlocked) ImGui.EndDisabled();
         ImGui.SameLine();
         if(ImGui.Button("Close review"))
         {
@@ -236,12 +255,13 @@ internal static class TabPresetHub
     private static void DrawRepositories(PresetHubModule hub)
     {
         ImGuiEx.TextWrapped("Preset Hub downloads GitHub archives into Splatoon's local configuration cache. Disabling a repository keeps its current cache; removing it hides its indexed presets.");
-        if(ImGui.BeginTable("PresetHubRepositories", 5, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingStretchProp))
+        if(ImGui.BeginTable("PresetHubRepositories", 6, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingStretchProp))
         {
             ImGui.TableSetupColumn("Enabled", ImGuiTableColumnFlags.WidthFixed, 65f.Scale());
             ImGui.TableSetupColumn("Repository");
             ImGui.TableSetupColumn("Ref", ImGuiTableColumnFlags.WidthFixed, 90f.Scale());
             ImGui.TableSetupColumn("Trust", ImGuiTableColumnFlags.WidthFixed, 90f.Scale());
+            ImGui.TableSetupColumn("Role", ImGuiTableColumnFlags.WidthFixed, 100f.Scale());
             ImGui.TableSetupColumn("Action", ImGuiTableColumnFlags.WidthFixed, 80f.Scale());
             ImGui.TableHeadersRow();
             foreach(var repository in hub.Repositories)
@@ -259,6 +279,9 @@ internal static class TabPresetHub
                 ImGui.TableNextColumn();
                 ImGui.TextUnformatted(repository.Trust.ToString());
                 ImGui.TableNextColumn();
+                ImGui.TextUnformatted(repository.Role.ToString());
+                if(!repository.AllowScriptInstallation) ImGui.TextDisabled("Scripts blocked");
+                ImGui.TableNextColumn();
                 if(repository.Id != "punishxiv-splatoon" && ImGui.Button("Remove")) hub.RemoveRepository(repository.Id);
                 ImGui.PopID();
             }
@@ -273,7 +296,7 @@ internal static class TabPresetHub
         ImGui.SetNextItemWidth(100f.Scale());
         ImGui.InputTextWithHint("##ref", "branch/tag", ref referenceInput, 100);
         ImGui.SetNextItemWidth(360f.Scale());
-        ImGui.InputTextWithHint("##paths", "Optional prefixes separated by ;", ref pathsInput, 500);
+        ImGui.InputTextWithHint("##paths", "Optional roots separated by ; (empty scans recursively)", ref pathsInput, 500);
         ImGui.SameLine();
         if(ImGui.Button("Add and index"))
         {

@@ -13,6 +13,28 @@ public enum RepositoryTrust
     Official,
 }
 
+public enum RepositoryRole
+{
+    Original,
+    Aggregator,
+    Mirror,
+    Archive,
+}
+
+public enum PresetFormat
+{
+    ModernLayout,
+    LegacyLayout,
+    NativeScript,
+}
+
+public enum PresetCompatibility
+{
+    Compatible,
+    NeedsReview,
+    Incompatible,
+}
+
 public enum InstallationStatus
 {
     NotInstalled,
@@ -36,6 +58,9 @@ public sealed record RepositoryDefinition
     public string DisplayName { get; init; } = "";
     public bool Enabled { get; init; } = true;
     public RepositoryTrust Trust { get; init; } = RepositoryTrust.Untrusted;
+    public RepositoryRole Role { get; init; } = RepositoryRole.Original;
+    public int SourcePriority { get; init; } = 50;
+    public bool AllowScriptInstallation { get; init; } = true;
     public IReadOnlyList<string> PathPrefixes { get; init; } = [];
     public IReadOnlyList<string> ExcludedPathPrefixes { get; init; } = [];
 
@@ -48,10 +73,58 @@ public sealed record RepositoryDefinition
         Name = "Splatoon",
         DisplayName = "Official Splatoon",
         Trust = RepositoryTrust.Official,
+        Role = RepositoryRole.Original,
+        SourcePriority = 90,
         PathPrefixes = ["Presets/", "SplatoonScripts/"],
         ExcludedPathPrefixes = ["SplatoonScripts/Tests/"],
     };
+
+    public static IReadOnlyList<RepositoryDefinition> CuratedCatalog() =>
+    [
+        OfficialSplatoon(),
+        Community("adamchris1992-ffxivsplat", "adamchris1992", "ffxivsplat", true, ["Presets/"]),
+        Community("ksirashi-presets", "Ksirashi", "Presets", true),
+        Community("lechuckxiv-xivstuff", "LeChuckXIV", "xivstuff", true, ["Splatoon/"]),
+        Community("buddiman-presets", "buddiman", "SplatoonPresets", true),
+        Community("ungeho-mydalamudpresets", "ungeho", "MyDalamudPresets", false, ["splatoon/"]),
+        Community("cptjabberwock-splatoonpresetslist", "cptjabberwock", "SplatoonPresetsList", false,
+            ["Community Presets/"], RepositoryRole.Aggregator, 40),
+        Community("errerer-ffxiv-splpresets", "Errerer", "FFXIV_SPLPresets", false,
+            allowScriptInstallation: false),
+        Community("thakyz-spl-presets", "thakyZ", "SPL_Presets", false),
+    ];
+
+    private static RepositoryDefinition Community(
+        string id,
+        string owner,
+        string name,
+        bool enabled,
+        IReadOnlyList<string>? prefixes = null,
+        RepositoryRole role = RepositoryRole.Original,
+        int priority = 100,
+        bool allowScriptInstallation = true) => new()
+    {
+        Id = id,
+        Owner = owner,
+        Name = name,
+        DisplayName = $"{owner}/{name}",
+        Enabled = enabled,
+        Trust = RepositoryTrust.Community,
+        Role = role,
+        SourcePriority = priority,
+        AllowScriptInstallation = allowScriptInstallation,
+        PathPrefixes = prefixes ?? [],
+    };
 }
+
+public sealed record PresetSourceReference(
+    string PresetId,
+    string RepositoryId,
+    string RepositoryName,
+    string SourceUri,
+    RepositoryTrust Trust,
+    RepositoryRole Role,
+    int Priority);
 
 public sealed record PresetEntry
 {
@@ -71,7 +144,18 @@ public sealed record PresetEntry
     public required string SourceUri { get; init; }
     public required string Content { get; init; }
     public required string ContentHash { get; init; }
+    public string Fingerprint { get; init; } = "";
     public string RuntimeIdentity { get; init; } = "";
+    public PresetFormat Format { get; init; }
+    public PresetCompatibility Compatibility { get; init; } = PresetCompatibility.Compatible;
+    public string CompatibilityDetail { get; init; } = "";
+    public string FamilyId { get; init; } = "";
+    public int VariantCount { get; init; } = 1;
+    public int ConfidenceScore { get; init; }
+    public bool LanguageDependent { get; init; }
+    public IReadOnlyList<string> ConfidenceNotes { get; init; } = [];
+    public IReadOnlyList<PresetSourceReference> Sources { get; init; } = [];
+    public IReadOnlyList<string> AlternatePresetIds { get; init; } = [];
 }
 
 public sealed record DutyPromptPreferences
@@ -94,6 +178,7 @@ public sealed record InstallationRecord
     public required string PresetId { get; init; }
     public required PresetKind Kind { get; init; }
     public required string ContentHash { get; init; }
+    public string Fingerprint { get; init; } = "";
     public required string RuntimeIdentity { get; init; }
     public required string RepositoryName { get; init; }
     public required string SourceUri { get; init; }

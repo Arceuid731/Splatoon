@@ -22,12 +22,12 @@ public sealed class RepositorySyncServiceTests : IDisposable
         var first = await service.SyncAsync(repository, cancellationToken: TestContext.Current.CancellationToken);
         var second = await service.SyncAsync(repository, cancellationToken: TestContext.Current.CancellationToken);
 
-        Assert.Single(first.Presets);
+        Assert.Equal(2, first.Presets.Count);
         Assert.Equal(RepositorySyncService.CurrentIndexVersion, first.IndexVersion);
         Assert.Equal(first.Revision, second.Revision);
         Assert.Equal(2, handler.CommitRequests);
         Assert.Equal(1, handler.TreeRequests);
-        Assert.Equal(1, handler.RawRequests);
+        Assert.Equal(2, handler.RawRequests);
     }
 
     public void Dispose()
@@ -58,7 +58,7 @@ public sealed class RepositorySyncServiceTests : IDisposable
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
                 {
                     Content = new StringContent(
-                        "{\"truncated\":false,\"tree\":[{\"path\":\"Presets/Dawntrail/Dungeons/Duty.md\",\"type\":\"blob\",\"size\":60}]}",
+                        "{\"truncated\":false,\"tree\":[{\"path\":\"Presets/Dawntrail/Dungeons/Duty.md\",\"type\":\"blob\",\"size\":60},{\"path\":\"Presets/Dawntrail/Dungeons/Legacy.txt\",\"type\":\"blob\",\"size\":60}]}",
                         Encoding.UTF8,
                         "application/json"),
                 });
@@ -67,7 +67,9 @@ public sealed class RepositorySyncServiceTests : IDisposable
             RawRequests++;
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
             {
-                Content = new StringContent("~Lv2~{\"Name\":\"Mechanic\",\"Group\":\"Duty\"}"),
+                Content = new StringContent(request.RequestUri.AbsolutePath.EndsWith("Legacy.txt", StringComparison.Ordinal)
+                    ? "Legacy~{\"ZoneLockH\":[1199],\"Elements\":{}}"
+                    : "~Lv2~{\"Name\":\"Mechanic\",\"Group\":\"Duty\"}"),
             });
         }
     }

@@ -35,7 +35,7 @@ internal sealed class PresetHubInstaller(InstallationRegistry registry)
 
     internal bool InstallLayout(PresetEntry preset, out string message)
     {
-        var previousRecord = registry.Find(preset.Id);
+        var previousRecord = registry.Find(preset);
         var previousNames = SplitRuntimeIdentity(previousRecord?.RuntimeIdentity);
         var previousLayouts = P.Config.LayoutsL.Where(x => previousNames.Contains(x.Name)).ToArray();
         P.Config.LayoutsL.RemoveAll(x => previousNames.Contains(x.Name));
@@ -60,6 +60,13 @@ internal sealed class PresetHubInstaller(InstallationRegistry registry)
 
     internal bool InstallReviewedScript(PresetEntry preset, ScriptSecurityReport report, out string message)
     {
+        if(preset.Compatibility == PresetCompatibility.Incompatible)
+        {
+            message = string.IsNullOrWhiteSpace(preset.CompatibilityDetail)
+                ? "This script is marked as incompatible."
+                : preset.CompatibilityDetail;
+            return false;
+        }
         if(report.ContentHash != preset.ContentHash)
         {
             message = "The script changed after review. Review it again before installing.";
@@ -79,7 +86,7 @@ internal sealed class PresetHubInstaller(InstallationRegistry registry)
 
     internal bool Uninstall(PresetEntry preset, out string message)
     {
-        var record = registry.Find(preset.Id);
+        var record = registry.Find(preset);
         if(record == null)
         {
             message = "Preset Hub has no installation record for this preset.";
@@ -104,7 +111,7 @@ internal sealed class PresetHubInstaller(InstallationRegistry registry)
                 CGui.OpenedGroup.Remove(group);
             }
             P.Config.Save();
-            registry.Remove(preset.Id);
+            registry.Remove(preset);
             message = $"Removed {removed} managed layout(s).";
             return true;
         }
@@ -123,7 +130,7 @@ internal sealed class PresetHubInstaller(InstallationRegistry registry)
                 }
             });
         }
-        registry.Remove(preset.Id);
+        registry.Remove(preset);
         message = script == null
             ? "Removed the stale installation record; the script was not loaded."
             : "Removed the managed script and moved its source file to the recycle bin.";
