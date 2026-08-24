@@ -6,7 +6,7 @@
     "AssemblyVersion": "__VERSION__",
     "TestingAssemblyVersion": "__VERSION__",
     "Punchline": "Splatoon with a curated, provenance-aware preset catalogue.",
-    "Description": "A custom Splatoon build with Preset Hub V2.1.1: curated repositories, robust content discovery, grouped variant comparison and choice, exact duty suggestions, managed installs, and explicit C# security review.",
+    "Description": "A custom Splatoon build with Preset Hub V2.2: curated repositories, shared variant comparison, multi-preset duty installation, exact duty suggestions, managed installs, and explicit C# security review.",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 15,
     "RepoUrl": "https://github.com/Arceuid731/Splatoon",
