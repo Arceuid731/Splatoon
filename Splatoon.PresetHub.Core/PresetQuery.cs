@@ -45,7 +45,9 @@ public static class PresetQuery
         if(options.Duty.Length > 0 && !Comparer.Equals(preset.Duty, options.Duty)) return false;
         if(options.Search.Length == 0) return true;
 
-        return new[] { preset.Title, preset.Author, preset.Duty, preset.Category, preset.Expansion, preset.RepositoryName }
+        var values = new[] { preset.Title, preset.Author, preset.Duty, preset.Category, preset.Expansion, preset.RepositoryName }
+            .Concat(preset.Variants.SelectMany(x => new[] { x.RepositoryName, x.RelativePath, x.Author }));
+        return values
             .Any(value => value.Contains(options.Search, StringComparison.OrdinalIgnoreCase));
     }
 

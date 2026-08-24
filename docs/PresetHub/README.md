@@ -17,7 +17,9 @@ Only three small hooks exist outside those folders: one project reference, modul
 - A source supports a repository URL/name, branch or tag, optional roots, exclusions in the model, and recursive discovery. An empty root scans the full repository.
 - The GitHub commit SHA is checked before downloading changed text and `.cs` files. Cached snapshots remain usable when GitHub is unavailable.
 - Layout exports are detected by content, including multiple exports per file, fenced-inline `~Lv2~` exports, and legacy `Name~{...}` exports. UTF-8 titles are preserved.
-- Exact layouts are collapsed by canonical content. Original sources are preferred over aggregators; mirrors remain visible as provenance. Differing layouts in the same conservative family remain separate and show their version count.
+- Exact layouts are collapsed by canonical content. Original sources are preferred over aggregators; mirrors remain visible as provenance. Differing layouts in the same conservative family share one browser row and open a choice panel.
+- The choice panel recommends the strongest compatible candidate while showing every version's source, confidence reasons, format, language risk, element/trigger/ID counts, and human-readable differences in geometry, matching, and visual styling.
+- Installing another layout version performs an explicit transactional replacement: the installed managed version is restored if Splatoon rejects the new one.
 - Confidence reflects provenance, exact territory metadata, format, compatibility, and possible language-dependent actor/trigger matching. It does not claim that one mechanic solution is objectively better.
 - Layouts are imported through Splatoon's existing importer and tracked by their installed layout names.
 - Scripts are never installed directly from a URL. Preset Hub analyses and displays the exact cached source and SHA-256 hash, requires an explicit confirmation, then passes those same bytes to Splatoon's compiler.

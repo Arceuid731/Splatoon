@@ -126,6 +126,14 @@ public sealed record PresetSourceReference(
     RepositoryRole Role,
     int Priority);
 
+public sealed record PresetContentSummary
+{
+    public int ElementCount { get; init; }
+    public int TriggerCount { get; init; }
+    public IReadOnlyList<string> ElementNames { get; init; } = [];
+    public IReadOnlyList<string> MechanicIdentifiers { get; init; } = [];
+}
+
 public sealed record PresetEntry
 {
     public required string Id { get; init; }
@@ -156,6 +164,8 @@ public sealed record PresetEntry
     public IReadOnlyList<string> ConfidenceNotes { get; init; } = [];
     public IReadOnlyList<PresetSourceReference> Sources { get; init; } = [];
     public IReadOnlyList<string> AlternatePresetIds { get; init; } = [];
+    public PresetContentSummary Summary { get; init; } = new();
+    public IReadOnlyList<PresetEntry> Variants { get; init; } = [];
 }
 
 public sealed record DutyPromptPreferences

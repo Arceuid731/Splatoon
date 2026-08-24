@@ -22,7 +22,9 @@ internal sealed class PresetHubDutyPromptWindow(PresetHubModule hub) : Window(
         TerritoryId = territoryId;
         suggestions = dutySuggestions;
         selectedLayouts.Clear();
-        selectedLayouts.UnionWith(dutySuggestions.Where(x => x.Kind == PresetKind.Layout).Select(x => x.Id));
+        selectedLayouts.UnionWith(dutySuggestions
+            .Where(x => x.Kind == PresetKind.Layout && x.VariantCount == 1)
+            .Select(x => x.Id));
         actionMessage = "";
         IsOpen = true;
     }
@@ -48,7 +50,7 @@ internal sealed class PresetHubDutyPromptWindow(PresetHubModule hub) : Window(
                 ImGui.PushID(preset.Id);
                 ImGui.TableNextRow();
                 ImGui.TableNextColumn();
-                if(preset.Kind == PresetKind.Layout)
+                if(preset.Kind == PresetKind.Layout && preset.VariantCount == 1)
                 {
                     var selected = selectedLayouts.Contains(preset.Id);
                     if(ImGui.Checkbox("##selected", ref selected))
@@ -64,7 +66,7 @@ internal sealed class PresetHubDutyPromptWindow(PresetHubModule hub) : Window(
                 ImGui.TableNextColumn();
                 ImGui.TextUnformatted(preset.Title);
                 var detail = $"{preset.RepositoryName} · confidence {preset.ConfidenceScore}/100";
-                if(preset.VariantCount > 1) detail += $" · {preset.VariantCount} versions";
+                if(preset.VariantCount > 1) detail += $" · {preset.VariantCount} choices";
                 if(preset.Sources.Count > 1) detail += $" · {preset.Sources.Count} sources";
                 ImGui.TextDisabled(detail);
                 if(preset.LanguageDependent) ImGui.TextColored(ImGuiColors.DalamudYellow, "May depend on client language");
@@ -72,7 +74,14 @@ internal sealed class PresetHubDutyPromptWindow(PresetHubModule hub) : Window(
                 ImGui.TextColored(preset.Kind == PresetKind.Script ? ImGuiColors.DalamudYellow : ImGuiColors.HealerGreen,
                     preset.Kind.ToString());
                 ImGui.TableNextColumn();
-                if(preset.Kind == PresetKind.Script && ImGui.Button("Review"))
+                if(preset.VariantCount > 1 && ImGui.Button($"Choose ({preset.VariantCount})"))
+                {
+                    TabPresetHub.OpenVariantPicker(preset);
+                    P.ConfigGui.TabRequest = "Preset Hub";
+                    P.ConfigGui.IsOpen = true;
+                    IsOpen = false;
+                }
+                else if(preset.Kind == PresetKind.Script && ImGui.Button("Review"))
                 {
                     TabPresetHub.OpenScriptReview(preset);
                     P.ConfigGui.TabRequest = "Preset Hub";

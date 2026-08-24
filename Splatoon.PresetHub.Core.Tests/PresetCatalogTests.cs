@@ -15,6 +15,7 @@ public sealed class PresetCatalogTests
         Assert.Equal("original", result.RepositoryId);
         Assert.Equal(2, result.Sources.Count);
         Assert.Contains("aggregator-id", result.AlternatePresetIds);
+        Assert.Single(result.Variants);
     }
 
     [Fact]
@@ -23,10 +24,23 @@ public sealed class PresetCatalogTests
         var first = Preset("first", "hash-a", "family", 100, RepositoryRole.Original);
         var second = Preset("second", "hash-b", "family", 90, RepositoryRole.Original);
 
-        var result = PresetCatalog.Build([first, second]);
+        var result = Assert.Single(PresetCatalog.Build([first, second]));
 
-        Assert.Equal(2, result.Count);
-        Assert.All(result, x => Assert.Equal(2, x.VariantCount));
+        Assert.Equal(2, result.VariantCount);
+        Assert.Equal(2, result.Variants.Count);
+        Assert.Equal("first", result.RepositoryId);
+    }
+
+    [Fact]
+    public void RecommendsTheHighestConfidenceCompatibleVersion()
+    {
+        var original = Preset("original", "hash-a", "family", 100, RepositoryRole.Original) with { ConfidenceScore = 70 };
+        var official = Preset("official", "hash-b", "family", 90, RepositoryRole.Original) with { ConfidenceScore = 95 };
+
+        var family = Assert.Single(PresetCatalog.Build([original, official]));
+
+        Assert.Equal("official", family.RepositoryId);
+        Assert.Equal(["official", "original"], family.Variants.Select(x => x.RepositoryId));
     }
 
     private static PresetEntry Preset(

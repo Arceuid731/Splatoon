@@ -97,6 +97,7 @@ public sealed partial class PresetIndexer
             var fingerprint = LayoutFingerprint(layout.Root, identity.Name);
             var languageDependent = IsLanguageDependent(layout.Root);
             var familyId = BuildFamilyId(PresetKind.Layout, identity.TerritoryIds, title);
+            var summary = SummarizeLayout(layout.Root);
             var (score, notes) = Score(repository, PresetKind.Layout, layout.Format,
                 PresetCompatibility.Compatible, identity.TerritoryIds.Count > 0, languageDependent);
 
@@ -115,7 +116,8 @@ public sealed partial class PresetIndexer
                 familyId: familyId,
                 confidenceScore: score,
                 confidenceNotes: notes,
-                languageDependent: languageDependent);
+                languageDependent: languageDependent,
+                summary: summary);
         }
     }
 
@@ -182,7 +184,8 @@ public sealed partial class PresetIndexer
         string familyId = "",
         int confidenceScore = 0,
         IReadOnlyList<string>? confidenceNotes = null,
-        bool languageDependent = false)
+        bool languageDependent = false,
+        PresetContentSummary? summary = null)
     {
         var stableSource = $"github:{repository.FullName}:{relativePath}:{kind}:{ordinal}";
         var id = ContentHash.Sha256(stableSource);
@@ -215,6 +218,7 @@ public sealed partial class PresetIndexer
             LanguageDependent = languageDependent,
             ConfidenceNotes = confidenceNotes ?? [],
             Sources = [new(id, repository.Id, repositoryName, sourceUri, repository.Trust, repository.Role, repository.SourcePriority)],
+            Summary = summary ?? new(),
         };
     }
 
@@ -365,6 +369,76 @@ public sealed partial class PresetIndexer
             return root.EnumerateObject().Any(x => IsLanguageDependent(x.Value));
         }
         return root.ValueKind == JsonValueKind.Array && root.EnumerateArray().Any(IsLanguageDependent);
+    }
+
+    private static PresetContentSummary SummarizeLayout(JsonElement root)
+    {
+        var elements = root.TryGetProperty("ElementsL", out var modern) && modern.ValueKind == JsonValueKind.Array
+            ? modern.EnumerateArray().ToArray()
+            : root.TryGetProperty("Elements", out var legacy) && legacy.ValueKind == JsonValueKind.Object
+                ? legacy.EnumerateObject().Select(x => x.Value).ToArray()
+                : [];
+        var triggers = root.TryGetProperty("Triggers", out var triggerArray) && triggerArray.ValueKind == JsonValueKind.Array
+            ? triggerArray.GetArrayLength()
+            : 0;
+        var names = elements
+            .Select(x => x.TryGetProperty("Name", out var name) && name.ValueKind == JsonValueKind.String ? name.GetString() : null)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(x => x!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var identifiers = new HashSet<string>(StringComparer.Ordinal);
+        CollectMechanicIdentifiers(root, identifiers);
+        return new()
+        {
+            ElementCount = elements.Length,
+            TriggerCount = triggers,
+            ElementNames = names,
+            MechanicIdentifiers = identifiers.Order(StringComparer.Ordinal).ToArray(),
+        };
+    }
+
+    private static void CollectMechanicIdentifiers(JsonElement node, HashSet<string> result)
+    {
+        if(node.ValueKind == JsonValueKind.Object)
+        {
+            foreach(var property in node.EnumerateObject())
+            {
+                var prefix = property.Name switch
+                {
+                    "refActorCastId" => "Cast",
+                    "refActorNPCNameID" => "NPC name",
+                    "refActorNPCID" => "NPC",
+                    "refActorBuffId" => "Status",
+                    "refActorDataID" => "Data",
+                    "refActorVFXPath" => "VFX",
+                    _ => "",
+                };
+                if(prefix.Length > 0)
+                {
+                    if(property.Value.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach(var value in property.Value.EnumerateArray()) AddIdentifier(prefix, value, result);
+                    }
+                    else
+                    {
+                        AddIdentifier(prefix, property.Value, result);
+                    }
+                }
+                CollectMechanicIdentifiers(property.Value, result);
+            }
+        }
+        else if(node.ValueKind == JsonValueKind.Array)
+        {
+            foreach(var value in node.EnumerateArray()) CollectMechanicIdentifiers(value, result);
+        }
+    }
+
+    private static void AddIdentifier(string prefix, JsonElement value, HashSet<string> result)
+    {
+        if(value.ValueKind == JsonValueKind.Number) result.Add($"{prefix} {value.GetRawText()}");
+        else if(value.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(value.GetString()))
+            result.Add($"{prefix} {value.GetString()}");
     }
 
     private static string BuildFamilyId(PresetKind kind, IReadOnlyList<uint> territories, string title)

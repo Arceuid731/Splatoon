@@ -12,6 +12,17 @@ internal sealed class PresetHubInstaller(InstallationRegistry registry)
 
     internal InstallationStatus GetStatus(PresetEntry preset) => registry.GetStatus(preset);
 
+    internal InstallationStatus GetFamilyStatus(PresetEntry family)
+    {
+        var statuses = Choices(family).Select(GetStatus).ToArray();
+        if(statuses.Contains(InstallationStatus.Installed)) return InstallationStatus.Installed;
+        if(statuses.Contains(InstallationStatus.UpdateAvailable)) return InstallationStatus.UpdateAvailable;
+        return InstallationStatus.NotInstalled;
+    }
+
+    internal PresetEntry? GetInstalledChoice(PresetEntry family) =>
+        Choices(family).FirstOrDefault(choice => GetStatus(choice) != InstallationStatus.NotInstalled);
+
     internal void CleanupStaleLayoutUi()
     {
         var validGroups = P.Config.LayoutsL
@@ -34,13 +45,17 @@ internal sealed class PresetHubInstaller(InstallationRegistry registry)
     }
 
     internal bool InstallLayout(PresetEntry preset, out string message)
+        => InstallLayoutChoice(preset, preset, out message);
+
+    internal bool InstallLayoutChoice(PresetEntry family, PresetEntry choice, out string message)
     {
-        var previousRecord = registry.Find(preset);
+        var installedChoice = GetInstalledChoice(family);
+        var previousRecord = installedChoice == null ? registry.Find(choice) : registry.Find(installedChoice);
         var previousNames = SplitRuntimeIdentity(previousRecord?.RuntimeIdentity);
         var previousLayouts = P.Config.LayoutsL.Where(x => previousNames.Contains(x.Name)).ToArray();
         P.Config.LayoutsL.RemoveAll(x => previousNames.Contains(x.Name));
 
-        var imported = Utils.ImportLayouts(preset.Content, silent: true);
+        var imported = Utils.ImportLayouts(choice.Content, silent: true);
         if(imported.Count == 0)
         {
             P.Config.LayoutsL.AddRange(previousLayouts);
@@ -52,9 +67,13 @@ internal sealed class PresetHubInstaller(InstallationRegistry registry)
         LayoutDrawSelector.CurrentElement = null;
         foreach(var group in imported.Select(x => x.Group).Where(x => !string.IsNullOrWhiteSpace(x))) CGui.OpenedGroup.Add(group);
         var runtimeIdentity = string.Join('\n', imported.Select(x => x.Name));
-        registry.MarkInstalled(preset, runtimeIdentity);
+        if(installedChoice != null && installedChoice.Id != choice.Id) registry.Remove(installedChoice);
+        registry.MarkInstalled(choice, runtimeIdentity);
         P.Config.Save();
-        message = $"Installed {imported.Count} layout(s).";
+        CleanupStaleLayoutUi();
+        message = installedChoice != null && installedChoice.Id != choice.Id
+            ? $"Replaced {installedChoice.RepositoryName} with {choice.RepositoryName}."
+            : $"Installed {imported.Count} layout(s).";
         return true;
     }
 
@@ -137,7 +156,21 @@ internal sealed class PresetHubInstaller(InstallationRegistry registry)
         return true;
     }
 
+    internal bool UninstallFamily(PresetEntry family, out string message)
+    {
+        var installed = GetInstalledChoice(family);
+        if(installed == null)
+        {
+            message = "Preset Hub has no installation record for this preset family.";
+            return false;
+        }
+        return Uninstall(installed, out message);
+    }
+
     private static HashSet<string> SplitRuntimeIdentity(string? value) =>
         value?.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .ToHashSet(StringComparer.Ordinal) ?? [];
+
+    private static IReadOnlyList<PresetEntry> Choices(PresetEntry family) =>
+        family.Variants.Count > 0 ? family.Variants : [family];
 }

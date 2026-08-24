@@ -73,7 +73,7 @@ internal sealed class PresetHubModule : IDisposable
                     .Where(x => enabledIds.Contains(x.Repository.Id))
                     .SelectMany(x => x.Presets)
                     .ToArray();
-                catalog = PresetCatalog.Build(indexed).Select(ResolveTerritoryMetadata).ToArray();
+                catalog = PresetCatalog.Create(indexed).Families.Select(ResolveFamilyTerritoryMetadata).ToArray();
                 catalogDirty = false;
                 return catalog;
             }
@@ -81,7 +81,7 @@ internal sealed class PresetHubModule : IDisposable
     }
 
     internal IReadOnlyList<PresetEntry> GetDutySuggestions(uint territoryId) =>
-        DutyPresetMatcher.FindSuggestions(Presets, territoryId, Installer.GetStatus);
+        DutyPresetMatcher.FindSuggestions(Presets, territoryId, Installer.GetFamilyStatus);
 
     internal void SetDutyPromptsEnabled(bool enabled)
     {
@@ -166,10 +166,10 @@ internal sealed class PresetHubModule : IDisposable
                 IsSyncing = false;
                 var enabledIds = repositories.Where(x => x.Enabled).Select(x => x.Id).ToHashSet(StringComparer.Ordinal);
                 var rawPresets = snapshots.Values.Where(x => enabledIds.Contains(x.Repository.Id)).SelectMany(x => x.Presets).ToArray();
-                var catalogCount = PresetCatalog.Build(rawPresets).Count;
-                var collapsedCount = rawPresets.Length - catalogCount;
+                var result = PresetCatalog.Create(rawPresets);
                 LastMessage = errors.Count == 0
-                    ? $"Index ready: {catalogCount} presets ({collapsedCount} duplicate copies collapsed)."
+                    ? $"Index ready: {result.Families.Count} preset families · {result.DistinctChoices} choices · " +
+                      $"{result.ExactDuplicatesCollapsed} duplicate copies collapsed."
                     : $"Cache kept; refresh failed for {errors.Count} repository(s): {string.Join(" | ", errors)}";
             }
         }
@@ -251,6 +251,13 @@ internal sealed class PresetHubModule : IDisposable
         Svc.Framework.Update -= OnFrameworkUpdate;
         EzConfigGui.WindowSystem.RemoveWindow(dutyPromptWindow);
         dutyPromptWindow.IsOpen = false;
+    }
+
+    private static PresetEntry ResolveFamilyTerritoryMetadata(PresetEntry preset)
+    {
+        var variants = preset.Variants.Select(ResolveTerritoryMetadata).ToArray();
+        var resolved = ResolveTerritoryMetadata(preset);
+        return resolved with { Variants = variants };
     }
 
     private static PresetEntry ResolveTerritoryMetadata(PresetEntry preset)
