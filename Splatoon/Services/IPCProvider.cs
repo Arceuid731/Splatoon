@@ -16,6 +16,7 @@ internal class IPCProvider
         EzIPC.Init(this);
     }
 
+    [EzIPC]
     public unsafe RolePosition GetRoleOf(IPlayerCharacter pc)
     {
         if(P.PriorityPopupWindow?.Assignments != null)
@@ -23,7 +24,7 @@ internal class IPCProvider
             for(var i = 0; i < P.PriorityPopupWindow.Assignments.Count; i++)
             {
                 var ass = P.PriorityPopupWindow.Assignments[i];
-                if(ass.IsInParty(false, out var m) && m.ContentID == pc.Struct()->ContentId)
+                if(ass.IsInParty(false, out var m) && m.IGameObject != null && m.IGameObject.AddressEquals(pc))
                 {
                     return PriorityPopupWindow.RolePositions.SafeSelect(i);
                 }
