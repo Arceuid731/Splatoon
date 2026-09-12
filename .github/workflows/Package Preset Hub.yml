@@ -7,6 +7,7 @@ on:
       - "Splatoon/**"
       - "Splatoon.PresetHub.Core/**"
       - "Splatoon.PresetHub.Core.Tests/**"
+      - "tools/PresetHubUiSmoke/**"
       - ".github/workflows/Package Preset Hub.yml"
   workflow_dispatch:
 
@@ -38,6 +39,9 @@ jobs:
       - name: Test Preset Hub
         shell: pwsh
         run: dotnet test Splatoon.PresetHub.Core.Tests/Splatoon.PresetHub.Core.Tests.csproj --configuration Release
+      - name: Render coverage tree with native ImGui
+        shell: pwsh
+        run: dotnet run --project tools/PresetHubUiSmoke --configuration Release -p:DalamudLibPath="$env:DALAMUD_PATH/"
       - name: Collect package
         id: package
         shell: pwsh

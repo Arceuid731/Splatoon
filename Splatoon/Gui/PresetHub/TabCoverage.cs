@@ -28,9 +28,9 @@ internal static class TabCoverage
             var covered = hub.CoverageTerritories.ToHashSet();
             areas = Svc.Data.GetExcelSheet<TerritoryType>()
                 .Where(row => !string.IsNullOrWhiteSpace(row.ContentFinderCondition.ValueNullable?.Name.ToString()) || covered.Contains(row.RowId))
-                .Select(row => new Area(row.RowId, ExcelTerritoryHelper.GetName(row.RowId, true),
-                    row.ExVersion.ValueNullable?.Name.ToString() ?? "Other",
-                    row.ContentFinderCondition.ValueNullable?.ContentType.ValueNullable?.Name.ToString() ?? "Other areas"))
+                .Select(row => new Area(row.RowId, CoverageTree.Label(ExcelTerritoryHelper.GetName(row.RowId, true), $"Area {row.RowId}"),
+                    CoverageTree.Label(row.ExVersion.ValueNullable?.Name.ToString(), "Other"),
+                    CoverageTree.Label(row.ContentFinderCondition.ValueNullable?.ContentType.ValueNullable?.Name.ToString(), "Other areas")))
                 .OrderBy(x => x.Expansion).ThenBy(x => x.Category).ThenBy(x => x.Name).ToArray();
         }
         if(ImGui.Button(hub.IsSyncing ? "Updating coverage..." : "Update coverage") && !hub.IsSyncing) _ = hub.SyncAllAsync();
@@ -58,10 +58,10 @@ internal static class TabCoverage
             {
                 foreach(var expansion in filtered.GroupBy(x => x.Expansion))
                 {
-                    if(!ImGui.TreeNodeEx(expansion.Key, search.Length > 0 ? ImGuiTreeNodeFlags.DefaultOpen : ImGuiTreeNodeFlags.None)) continue;
+                    if(!CoverageTree.Node(expansion.Key, expansion.Key, search.Length > 0 ? ImGuiTreeNodeFlags.DefaultOpen : ImGuiTreeNodeFlags.None)) continue;
                     foreach(var category in expansion.GroupBy(x => x.Category))
                     {
-                        if(!ImGui.TreeNodeEx(category.Key, search.Length > 0 ? ImGuiTreeNodeFlags.DefaultOpen : ImGuiTreeNodeFlags.None)) continue;
+                        if(!CoverageTree.Node(category.Key, category.Key, search.Length > 0 ? ImGuiTreeNodeFlags.DefaultOpen : ImGuiTreeNodeFlags.None)) continue;
                         foreach(var area in category)
                         {
                             if(ImGui.Selectable($"{area.Name}##{area.Id}", selectedTerritory == area.Id)) selectedTerritory = area.Id;
@@ -106,7 +106,7 @@ internal static class TabCoverage
             if(ImGui.Checkbox("##actor", ref actorEnabled)) hub.SetActorEnabled(territory, actor.Key, actorEnabled);
             ImGui.SameLine();
             var actorMechanics = actor.Select(x => x.Claim.MechanicId).Distinct().ToArray();
-            var open = ImGui.TreeNodeEx($"{ActorName(actor.First().Claim)} ({actorMechanics.Count(active.Contains)}/{actorMechanics.Length})",
+            var open = CoverageTree.Node("encounter", $"{ActorName(actor.First().Claim)} ({actorMechanics.Count(active.Contains)}/{actorMechanics.Length})",
                 ImGuiTreeNodeFlags.DefaultOpen);
             if(open)
             {
@@ -188,7 +188,7 @@ internal static class TabCoverage
             if(ImGui.SmallButton("Close details")) expandedMechanic = "";
         }
         var scripts = hub.ScriptSourcesFor(territory);
-        if(scripts.Count > 0 && ImGui.TreeNodeEx("Scripted aids", ImGuiTreeNodeFlags.DefaultOpen))
+        if(scripts.Count > 0 && CoverageTree.Node("scripts", "Scripted aids", ImGuiTreeNodeFlags.DefaultOpen))
         {
             ImGui.TextDisabled("Listed by script; individual mechanics are not indexed.");
             foreach(var script in scripts)

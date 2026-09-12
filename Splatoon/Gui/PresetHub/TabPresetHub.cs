@@ -43,12 +43,13 @@ internal static class TabPresetHub
                 DrawBrowser(hub, installedOnly: false);
                 ImGui.EndTabItem();
             }
-            if(ImGui.BeginTabItem("Installed"))
+            if(ImGui.BeginTabItem("Saved installations"))
             {
+                ImGui.TextDisabled("Previously installed drawings and scripts. Manage active aids in Coverage.");
                 DrawBrowser(hub, installedOnly: true);
                 ImGui.EndTabItem();
             }
-            if(ImGui.BeginTabItem("Repositories"))
+            if(ImGui.BeginTabItem("Sources"))
             {
                 DrawRepositories(hub);
                 ImGui.EndTabItem();
@@ -81,12 +82,13 @@ internal static class TabPresetHub
 
     private static void DrawBrowser(PresetHubModule hub, bool installedOnly)
     {
+        if(!installedOnly) ImGui.TextDisabled("Browse source files and review scripts. Manage drawing aids in Coverage.");
         ImGui.SetNextItemWidth(260f.Scale());
         ImGui.InputTextWithHint("##PresetHubSearch", "Search title, duty, author...", ref search, 200);
         ImGui.SameLine();
         DrawNullableEnumCombo("Type", ref kindFilter);
         ImGui.SameLine();
-        DrawNullableEnumCombo("Status", ref statusFilter);
+        DrawNullableEnumCombo("Saved status", ref statusFilter);
 
         var presets = installedOnly ? hub.InstalledPresets : hub.Presets;
         if(DrawStringCombo("Expansion", ref expansionFilter, presets.Select(x => x.Expansion)))
@@ -120,7 +122,7 @@ internal static class TabPresetHub
             ImGui.TableSetupColumn("Type", ImGuiTableColumnFlags.WidthFixed, 70f.Scale());
             ImGui.TableSetupColumn("Content", ImGuiTableColumnFlags.WidthStretch | ImGuiTableColumnFlags.DefaultSort);
             ImGui.TableSetupColumn("Repository", ImGuiTableColumnFlags.WidthFixed, 130f.Scale());
-            ImGui.TableSetupColumn("Status", ImGuiTableColumnFlags.WidthFixed, 100f.Scale());
+            ImGui.TableSetupColumn("Saved installation", ImGuiTableColumnFlags.WidthFixed, 120f.Scale());
             ImGui.TableSetupColumn("Action", ImGuiTableColumnFlags.WidthFixed | ImGuiTableColumnFlags.NoSort, 190f.Scale());
             ImGui.TableHeadersRow();
 
@@ -190,7 +192,9 @@ internal static class TabPresetHub
                 ? $"{preset.Trust} · {preset.Sources.Count - 1} mirror(s) collapsed"
                 : preset.Trust.ToString());
         ImGui.TableNextColumn();
-        ImGui.TextUnformatted(status.ToString());
+        ImGui.TextUnformatted(preset.Kind == PresetKind.Layout
+            ? status == InstallationStatus.NotInstalled ? "—" : "Saved copy"
+            : status.ToString());
         ImGui.TableNextColumn();
 
         var primaryActionDrawn = false;
