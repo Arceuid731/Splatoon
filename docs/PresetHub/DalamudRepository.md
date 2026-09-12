@@ -23,9 +23,13 @@ The fork intentionally keeps `InternalName: Splatoon`, because it is a replaceme
 
 ## Current delivery
 
-`preset-hub-v3.0.0` / assembly `3.9.2.30` was published on 2026-09-12 under the
-owner's explicit request to deliver the refactor for an in-game update. Both CI
-workflows passed; the public package hash and the exact repository URL above were
-verified. Client and combat smoke tests remain pending. See
-[the coverage report](Coverage-refactor.md#publication-vérifiée-le-12-septembre-2026)
-for the source commit, workflow links and package hash.
+`preset-hub-v3.0.1` / assembly `3.9.2.31` fixes the native crash reported when
+expanding A Realm Reborn. The source commit is
+`cf1bb1b95476ec7b33be87c7b83057b96d4439f5`.
+Both [core CI](https://github.com/Arceuid731/Splatoon/actions/runs/34716895489)
+and [Windows packaging with native UI regression](https://github.com/Arceuid731/Splatoon/actions/runs/34716895491)
+passed. The public package matches the CI artifact, SHA-256
+`0f6a499f4ec46aac4287d6c13bb36a05909b25dd0e99528c80ecf9c4e6f8a7d2`.
+The original native crash was reproduced in an isolated process; the corrected
+tree renders successfully with the actual Dalamud ImGui binding. Reopening it in
+the player's client remains to be confirmed. See [release notes](Release-v3.0.1.md).
