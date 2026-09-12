@@ -23,6 +23,14 @@ internal sealed partial class PresetHubModule
     }
 
     internal void TestTick() => UpdateCoverageRuntime();
+    internal void TestReloadCoverage() => InitializeCoverage();
+    internal void TestRebuildCoverage(params PresetEntry[] entries)
+    {
+        snapshots.Clear();
+        foreach(var group in entries.GroupBy(x => x.RepositoryId))
+            snapshots[group.Key] = new() { Repository = repositories.Single(x => x.Id == group.Key), Presets = group.ToArray(), Revision = "test", SyncedAt = DateTimeOffset.UtcNow };
+        RebuildCoverage();
+    }
     internal void TestExpireLocalCache() => nextLocalCheck = 0;
     internal void TestSetSources(params PresetEntry[] entries)
     {

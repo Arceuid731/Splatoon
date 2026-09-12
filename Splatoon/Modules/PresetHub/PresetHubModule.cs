@@ -216,7 +216,9 @@ internal sealed partial class PresetHubModule : IDisposable
                 var result = PresetCatalog.Create(rawPresets);
                 LastMessage = errors.Count == 0
                     ? $"{result.Families.Count} presets available · {result.DistinctChoices} versions."
-                    : $"Refresh failed: {string.Join(", ", errors)}. Showing saved presets.";
+                    : $"{errors.Count} source refresh error(s). " + (coverageLibrary.SourceRevision.Length > 0
+                        ? "Saved coverage remains available."
+                        : "No saved coverage is available yet.");
                 // A request can arrive between the loop's last check and this lock.
                 if(syncRequested && !disposed) _ = SyncAllAsync();
             }

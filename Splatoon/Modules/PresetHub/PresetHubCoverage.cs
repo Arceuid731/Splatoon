@@ -54,7 +54,12 @@ internal sealed partial class PresetHubModule
     {
         coveragePreferences = store.LoadCoveragePreferences();
         coverageLibrary = store.LoadCoverageLibrary() ?? new();
+        if(coverageLibrary.SourceRevision.Length > 0) CoverageMessage = DescribeCoverage(coverageLibrary);
     }
+
+    private static string DescribeCoverage(CoverageLibrary library) => library.Contributions.Count == 0
+        ? "No drawing aids found in the enabled sources."
+        : $"Coverage ready · {library.Contributions.Select(x => x.TerritoryId).Distinct().Count()} areas · updated {library.ComputedAt.LocalDateTime:g}";
 
     // Called by the repository worker. Only immutable core data crosses threads.
     private void RebuildCoverage()
@@ -65,14 +70,21 @@ internal sealed partial class PresetHubModule
             var enabled = repositories.Where(x => x.Enabled).Select(x => x.Id).ToHashSet();
             entries = snapshots.Values.Where(x => enabled.Contains(x.Repository.Id)).SelectMany(x => x.Presets).ToArray();
         }
-        var compiled = coverageBuilder.Build(entries, lifetime.Token);
+        var compiled = coverageBuilder.Build(entries, lifetime.Token, Coverage);
         lifetime.Token.ThrowIfCancellationRequested();
-        lock(gate) if(coverageLibrary.SourceRevision == compiled.SourceRevision) return;
+        lock(gate)
+        {
+            if(ReferenceEquals(coverageLibrary, compiled))
+            {
+                CoverageMessage = DescribeCoverage(compiled);
+                return;
+            }
+        }
         store.SaveCoverageLibrary(compiled);
         lock(gate)
         {
             coverageLibrary = compiled;
-            CoverageMessage = $"{compiled.Contributions.Select(x => x.TerritoryId).Distinct().Count()} areas · updated {compiled.ComputedAt.LocalDateTime:t}";
+            CoverageMessage = DescribeCoverage(compiled);
         }
     }
 

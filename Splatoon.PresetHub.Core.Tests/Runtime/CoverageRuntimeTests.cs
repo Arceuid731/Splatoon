@@ -37,6 +37,22 @@ public sealed class CoverageRuntimeTests : IDisposable
     }
 
     [Fact]
+    public void SavedCoverageIsReadyBeforeNetworkRefreshAndUnchangedRebuildPreservesIt()
+    {
+        var source = Preset("cached");
+        store.SaveCoverageLibrary(new CoverageLibraryBuilder().Build([source], TestContext.Current.CancellationToken));
+        var hub = new PresetHubModule(store, registry, source);
+        hub.TestReloadCoverage();
+        var loaded = hub.Coverage;
+        Assert.StartsWith("Coverage ready", hub.CoverageMessage);
+        hub.TestTick();
+        Assert.Single(hub.CoverageLayouts);
+        hub.TestRebuildCoverage(source);
+        Assert.Same(loaded, hub.Coverage);
+        Assert.StartsWith("Coverage ready", hub.CoverageMessage);
+    }
+
+    [Fact]
     public void DisablingASourceTakesEffectEvenIfUiReadTheNewIndexFirst()
     {
         var source = Preset("remote");

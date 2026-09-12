@@ -12,6 +12,19 @@ public sealed class CoverageTests
         "{\"Name\":\"Attack\",\"type\":1,\"radius\":5,\"refActorComparisonType\":4,\"refActorNPCID\":3014,\"refActorRequireCast\":true,\"refActorCastId\":[" + cast + "]" + extra + "}";
 
     [Fact]
+    public void FreshBuilderReusesSavedLibraryButRebuildsChangedOrRemovedSources()
+    {
+        var source = Preset("cached", Element(1));
+        var token = TestContext.Current.CancellationToken;
+        var saved = new CoverageLibraryBuilder().Build([source], token);
+        Assert.Same(saved, new CoverageLibraryBuilder().Build([source], token, saved));
+        Assert.NotSame(saved, new CoverageLibraryBuilder().Build([source with { ContentHash = "changed" }], token, saved));
+        Assert.Empty(new CoverageLibraryBuilder().Build([], token, saved).Contributions);
+        Assert.NotSame(saved, new CoverageLibraryBuilder().Build([source], token, saved with { Version = 0 }));
+        Assert.Throws<OperationCanceledException>(() => new CoverageLibraryBuilder().Build([source], new(true), saved));
+    }
+
+    [Fact]
     public void InactiveAndInvertedFieldsAreNotAdvertisedAsCoverage()
     {
         Assert.Empty(LayoutCoverageAnalyzer.ActiveSignals("{\"refActorCastId\":[3060],\"refActorBuffId\":[420],\"refActorVFXPath\":\"vfx\"}"));
