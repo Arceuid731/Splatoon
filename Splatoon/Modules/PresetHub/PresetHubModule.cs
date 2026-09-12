@@ -10,7 +10,7 @@ using Splatoon.PresetHub.Core;
 
 namespace Splatoon.Modules.PresetHub;
 
-internal sealed class PresetHubModule : IDisposable
+internal sealed partial class PresetHubModule : IDisposable
 {
     private readonly object gate = new();
     private readonly PresetHubStore store;
@@ -50,6 +50,7 @@ internal sealed class PresetHubModule : IDisposable
         var registry = new InstallationRegistry(store);
         registry.RememberPresets(snapshots.Values.SelectMany(x => x.Presets));
         Installer = new(registry);
+        InitializeCoverage();
         dutyPromptPreferences = store.LoadDutyPromptPreferences();
         dutyPromptWindow = new(this);
         EzConfigGui.WindowSystem.AddWindow(dutyPromptWindow);
@@ -133,6 +134,7 @@ internal sealed class PresetHubModule : IDisposable
 
     private void OnFrameworkUpdate(IFramework framework)
     {
+        UpdateCoverageRuntime();
         var territoryId = Svc.ClientState.TerritoryType;
         if(!promptScheduler.ShouldCheck(territoryId,
                Svc.ClientState.IsLoggedIn && Player.Available && Svc.Condition[ConditionFlag.BoundByDuty],
@@ -142,9 +144,10 @@ internal sealed class PresetHubModule : IDisposable
             promptScheduler.CompleteCheck(false, false);
             return;
         }
-        var suggestions = GetDutySuggestions(territoryId);
-        promptScheduler.CompleteCheck(suggestions.Count > 0, IsSyncing);
-        if(suggestions.Count > 0) dutyPromptWindow.Show(territoryId, suggestions);
+        var hasCoverage = ContributionsFor(territoryId).Count > 0 ||
+            Presets.Any(x => x.Kind == PresetKind.Script && x.TerritoryIds.Contains(territoryId));
+        promptScheduler.CompleteCheck(hasCoverage, IsSyncing);
+        if(hasCoverage) dutyPromptWindow.Show(territoryId);
     }
 
     internal Task SyncAllAsync(bool force = false)
@@ -166,6 +169,7 @@ internal sealed class PresetHubModule : IDisposable
         var errors = new List<string>();
         try
         {
+            RebuildCoverage();
             while(true)
             {
                 RepositoryDefinition[] requested;
@@ -199,6 +203,7 @@ internal sealed class PresetHubModule : IDisposable
                         exception.Log();
                     }
                 }
+                RebuildCoverage();
             }
         }
         catch(OperationCanceledException) when(lifetime.IsCancellationRequested) { }

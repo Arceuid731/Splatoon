@@ -23,14 +23,21 @@ internal static class TabPresetHub
     private static string pathsInput = "";
     private static string repositoryError = "";
     private static string actionMessage = "";
+    private static bool openSourceLibrary;
 
     internal static void Draw()
     {
         var hub = P.PresetHub;
         if(ImGui.BeginTabBar("PresetHubTabs"))
         {
-            if(ImGui.BeginTabItem("Browse"))
+            if(ImGui.BeginTabItem("Coverage"))
             {
+                TabCoverage.Draw(hub);
+                ImGui.EndTabItem();
+            }
+            if(ImGui.BeginTabItem("Source library", openSourceLibrary ? ImGuiTabItemFlags.SetSelected : ImGuiTabItemFlags.None))
+            {
+                openSourceLibrary = false;
                 DrawBrowser(hub, installedOnly: false);
                 ImGui.EndTabItem();
             }
@@ -55,6 +62,7 @@ internal static class TabPresetHub
 
     internal static void OpenScriptReview(PresetEntry preset)
     {
+        openSourceLibrary = true;
         selectedFamily = null;
         reviewedScript = preset;
         reviewReport = P.PresetHub.SecurityAnalyzer.Analyze(preset.Content);
@@ -156,7 +164,7 @@ internal static class TabPresetHub
         ImGui.TextUnformatted(preset.Title);
         if(!string.IsNullOrWhiteSpace(preset.Author)) ImGui.TextDisabled(preset.Author);
         ImGui.TextDisabled(preset.VariantCount > 1
-            ? $"{preset.VariantCount} choices · recommended: {preset.RepositoryName} · confidence {preset.ConfidenceScore}/100"
+            ? $"{preset.VariantCount} source versions"
             : $"Confidence {preset.ConfidenceScore}/100");
         if(preset.LanguageDependent) ImGui.TextColored(ImGuiColors.DalamudYellow, "May depend on client language");
         if(preset.Format == PresetFormat.LegacyLayout) ImGui.TextDisabled("Legacy layout format");
@@ -175,7 +183,7 @@ internal static class TabPresetHub
         var repositories = preset.Variants.Select(x => x.RepositoryName).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         ImGui.TextUnformatted(preset.VariantCount > 1 ? $"{repositories.Length} source(s)" : preset.RepositoryName);
         ImGui.TextDisabled(preset.VariantCount > 1
-            ? $"Recommended: {preset.RepositoryName}"
+            ? $"{preset.VariantCount} versions available"
             : preset.Sources.Count > 1
                 ? $"{preset.Trust} · {preset.Sources.Count - 1} mirror(s) collapsed"
                 : preset.Trust.ToString());
@@ -341,11 +349,11 @@ internal static class TabPresetHub
     {
         var preferences = hub.DutyPromptPreferences;
         var enabled = preferences.Enabled;
-        if(ImGui.Checkbox("Suggest matching presets when entering a duty", ref enabled)) hub.SetDutyPromptsEnabled(enabled);
+        if(ImGui.Checkbox("Show coverage when entering duties", ref enabled)) hub.SetDutyPromptsEnabled(enabled);
         ImGuiEx.TextWrapped("Choose available presets and updates when entering a duty.");
 
         ImGui.Separator();
-        ImGui.TextUnformatted("Duties where suggestions are hidden");
+        ImGui.TextUnformatted("Areas with a hidden coverage panel");
         if(preferences.SuppressedTerritoryIds.Count == 0)
         {
             ImGui.TextDisabled("None");
@@ -357,7 +365,7 @@ internal static class TabPresetHub
             ImGui.PushID((int)territoryId);
             ImGui.TextUnformatted(ExcelTerritoryHelper.GetName(territoryId, true));
             ImGui.SameLine();
-            if(ImGui.SmallButton("Enable suggestions")) hub.SetDutySuppressed(territoryId, false);
+            if(ImGui.SmallButton("Show panel")) hub.SetDutySuppressed(territoryId, false);
             ImGui.PopID();
         }
     }

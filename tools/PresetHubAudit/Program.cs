@@ -1,6 +1,42 @@
 using System.Text.Json;
 using Splatoon.PresetHub.Core;
 
+if(args.Length >= 3 && args[0] == "--coverage")
+{
+    var jsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web) { WriteIndented = true };
+    var snapshots = args.Skip(2).SelectMany(directory => Directory.EnumerateFiles(directory, "*.json"))
+        .Select(path => JsonSerializer.Deserialize<RepositorySnapshot>(File.ReadAllText(path), jsonOptions)!)
+        .Where(snapshot => snapshot?.Repository != null).ToArray();
+    var definitions = RepositoryDefinition.CuratedCatalog();
+    var presets = snapshots.SelectMany(snapshot =>
+    {
+        var definition = definitions.FirstOrDefault(x => x.FullName.Equals(snapshot.Repository.FullName, StringComparison.OrdinalIgnoreCase));
+        return definition == null ? Array.Empty<PresetEntry>() : new PresetIndexer().Index(definition,
+            snapshot.Presets.GroupBy(x => x.RelativePath).Select(group => (group.Key, string.Join('\n', group.Select(x => x.Content)))));
+    }).ToArray();
+    var watch = System.Diagnostics.Stopwatch.StartNew();
+    var library = new CoverageLibraryBuilder().Build(presets);
+    var analysisMs = watch.ElapsedMilliseconds;
+    var plans = library.Contributions.Select(x => x.TerritoryId).Distinct().Order().Select(territory =>
+    {
+        var plan = CoveragePlanner.Compute(library.Contributions, territory);
+        var conflicts = plan.Selected.SelectMany(x => x.Claims.Select(c => c.AidId)).GroupBy(x => x).Where(x => x.Count() > 1).Count();
+        return new { territory, plan.AvailableAids, plan.CoveredAids, plan.SearchComplete, conflicts,
+            active = plan.Selected.Count, options = plan.Alternatives.Count,
+            mechanics = plan.Selected.SelectMany(x => x.Claims).Select(x => x.MechanicId).Distinct().Count() };
+    }).ToArray();
+    var directory = Path.GetFullPath(args[1]);
+    Directory.CreateDirectory(directory);
+    File.WriteAllText(Path.Combine(directory, "coverage-library.json"), JsonSerializer.Serialize(library, jsonOptions));
+    File.WriteAllText(Path.Combine(directory, "coverage-audit.json"), JsonSerializer.Serialize(new
+    {
+        sourceEntries = presets.Length, contributions = library.Contributions.Count, analysisMs,
+        totalMs = watch.ElapsedMilliseconds, diagnostics = library.Diagnostics, plans,
+    }, jsonOptions));
+    Console.WriteLine($"{presets.Length} entries -> {library.Contributions.Count} contributions in {analysisMs}ms; {plans.Length} territories; {plans.Sum(x => x.conflicts)} conflicts; {plans.Count(x => !x.SearchComplete)} bounded searches; {watch.ElapsedMilliseconds}ms total.");
+    return plans.Any(x => x.conflicts > 0) ? 1 : 0;
+}
+
 if(args.Length < 2)
 {
     Console.Error.WriteLine("Usage: PresetHubAudit <output-directory> <existing-cache-directory> [owner/repository ...]");

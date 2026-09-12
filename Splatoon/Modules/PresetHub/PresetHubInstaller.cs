@@ -12,6 +12,9 @@ internal sealed class PresetHubInstaller(InstallationRegistry registry) : IDispo
     private bool disposed;
     public void Dispose() => disposed = true;
     internal IReadOnlyCollection<InstallationRecord> Records => registry.Records;
+    internal IEnumerable<(InstallationRecord Record, Layout Layout)> CoverageInstallations() =>
+        registry.Records.Where(x => x.Kind == PresetKind.Layout)
+            .SelectMany(record => ManagedLayouts(record).Select(layout => (record, layout)));
     internal IReadOnlyList<PresetEntry> IncludeUnavailableInstallations(IReadOnlyList<PresetEntry> families) =>
         registry.IncludeUnavailableInstallations(families);
 

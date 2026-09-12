@@ -433,6 +433,7 @@ public unsafe class Splatoon : IDalamudPlugin
         {
             ResetLayout(l);
         }
+        if(PresetHub != null) foreach(var l in PresetHub.CoverageLayouts) ResetLayout(l);
         ScriptingProcessor.Scripts.Each(x => x.Controller.Layouts.Values.Each(ResetLayout));
         AttachedInfo.VFXInfos.Clear();
         Logger.OnTerritoryChanged();
@@ -593,8 +594,9 @@ public unsafe class Splatoon : IDalamudPlugin
 
                 foreach(var i in Config.LayoutsL)
                 {
-                    ProcessLayout(i);
+                    if(PresetHub?.ReplacesLayout(i) != true) ProcessLayout(i);
                 }
+                if(PresetHub != null) foreach(var layout in PresetHub.CoverageLayouts) ProcessLayout(layout);
 
                 foreach(var x in ScriptingProcessor.Scripts)
                 {
@@ -683,6 +685,7 @@ public unsafe class Splatoon : IDalamudPlugin
         {
             ResetLayout(l);
         }
+        if(PresetHub != null) foreach(var l in PresetHub.CoverageLayouts) ResetLayout(l);
         foreach(var de in dynamicElements)
         {
             foreach(var l in de.Layouts)

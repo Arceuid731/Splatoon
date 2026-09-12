@@ -92,7 +92,7 @@ public sealed record RepositoryDefinition
         Community("errerer-ffxiv-splpresets", "Errerer", "FFXIV_SPLPresets", false,
             allowScriptInstallation: false),
         Community("thakyz-spl-presets", "thakyZ", "SPL_Presets", false),
-        Community("hibiya615-splatoon-presets", "Hibiya615", "Splatoon_Presets", true, ["[EN Set]/"],
+        Community("hibiya615-splatoon-presets", "Hibiya615", "Splatoon_Presets", true,
             allowScriptInstallation: false),
         Community("leathen94-presets", "Leathen-94", "Presets", true, allowScriptInstallation: false),
         Community("sourpuh-presets", "sourpuh", "SplatoonPresets", true, allowScriptInstallation: false),

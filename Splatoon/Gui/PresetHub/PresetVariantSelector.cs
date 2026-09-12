@@ -19,8 +19,6 @@ internal static class PresetVariantSelector
     {
         ImGui.TextDisabled($"{choice.RepositoryName} · confidence {choice.ConfidenceScore}/100 · " +
                            PresetVariantComparison.ContentSummary(choice));
-        if(choice.Id == Recommended(family).Id && family.VariantCount > 1)
-            ImGui.TextColored(ImGuiColors.HealerGreen, "Recommended choice");
         if(choice.LanguageDependent)
             ImGui.TextColored(ImGuiColors.DalamudYellow, "May depend on client language");
     }
@@ -78,7 +76,7 @@ internal static class PresetVariantSelector
             ImGui.TableSetupColumn("Version", ImGuiTableColumnFlags.WidthFixed, 155f.Scale());
             ImGui.TableSetupColumn("Confidence", ImGuiTableColumnFlags.WidthFixed, 145f.Scale());
             ImGui.TableSetupColumn("Contains", ImGuiTableColumnFlags.WidthFixed, 160f.Scale());
-            ImGui.TableSetupColumn("Compared with recommended", ImGuiTableColumnFlags.WidthStretch);
+            ImGui.TableSetupColumn("Differences", ImGuiTableColumnFlags.WidthStretch);
             ImGui.TableSetupColumn("Compatibility", ImGuiTableColumnFlags.WidthFixed, 145f.Scale());
             ImGui.TableSetupColumn(installImmediately ? "Action" : "Choice", ImGuiTableColumnFlags.WidthFixed, 100f.Scale());
             ImGui.TableHeadersRow();
@@ -88,7 +86,6 @@ internal static class PresetVariantSelector
                 ImGui.TableNextRow();
                 ImGui.TableNextColumn();
                 ImGui.TextUnformatted(choice.RepositoryName);
-                if(choice.Id == recommended.Id) ImGui.TextColored(ImGuiColors.HealerGreen, "Recommended");
                 if(choice.Sources.Count > 1) ImGui.TextDisabled($"Also in {choice.Sources.Count - 1} mirror(s)");
                 ImGui.TextDisabled(choice.RelativePath);
 

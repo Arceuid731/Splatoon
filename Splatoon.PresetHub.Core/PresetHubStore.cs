@@ -4,7 +4,7 @@ namespace Splatoon.PresetHub.Core;
 
 public sealed class PresetHubStore
 {
-    private const int CurrentCuratedCatalogVersion = 2;
+    private const int CurrentCuratedCatalogVersion = 3;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         WriteIndented = true,
@@ -34,7 +34,12 @@ public sealed class PresetHubStore
                 {
                     repositories.Add(curated);
                 }
-                // Existing sources retain all user settings, including script restrictions.
+                else if(curated.Id == "hibiya615-splatoon-presets" &&
+                        repositories[existingIndex].PathPrefixes.SequenceEqual(new[] { "[EN Set]/" }))
+                {
+                    // Expand the previous built-in restriction; retain enabled/script settings.
+                    repositories[existingIndex] = repositories[existingIndex] with { PathPrefixes = [] };
+                }
             }
             SaveRepositories(repositories);
             Save("repository-catalog-version.json", CurrentCuratedCatalogVersion);
@@ -62,6 +67,15 @@ public sealed class PresetHubStore
 
     public void SaveDutyPromptPreferences(DutyPromptPreferences preferences) =>
         Save("duty-prompt.json", preferences);
+
+    public CoveragePreferences LoadCoveragePreferences() => Load<CoveragePreferences>("coverage-preferences.json") ?? new();
+    public void SaveCoveragePreferences(CoveragePreferences preferences) => Save("coverage-preferences.json", preferences);
+    public CoverageLibrary? LoadCoverageLibrary()
+    {
+        var library = Load<CoverageLibrary>("coverage-library.json");
+        return library?.Version == CoverageLibrary.CurrentVersion ? library : null;
+    }
+    public void SaveCoverageLibrary(CoverageLibrary library) => Save("coverage-library.json", library);
 
     private T? Load<T>(string relativePath)
     {
