@@ -54,8 +54,7 @@ internal static class PresetVariantSelector
     private static void DrawHeader(PresetEntry family)
     {
         ImGui.TextUnformatted($"Choose a version: {family.Title}");
-        ImGuiEx.TextWrapped("Versions share the same duty and normalized preset name, but their actual overlay content differs. " +
-                            "The recommendation favors compatibility, territory metadata, language-independent matching, and source confidence.");
+        ImGuiEx.TextWrapped("Compare the overlays and choose the version you prefer.");
     }
 
     private static string DrawTable(

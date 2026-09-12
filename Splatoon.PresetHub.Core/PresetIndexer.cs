@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
@@ -87,16 +88,21 @@ public sealed partial class PresetIndexer
         }
 
         var ordinal = 0;
+        var nameCounts = parsed.GroupBy(x => ReadLayoutIdentity(x.Root, relativePath, 0, x.ExternalName).Name)
+            .ToDictionary(x => x.Key, x => x.Count(), StringComparer.Ordinal);
         foreach(var layout in parsed.OrderBy(x => x.Position))
         {
             var identity = ReadLayoutIdentity(layout.Root, relativePath, ordinal, layout.ExternalName);
             var title = string.IsNullOrWhiteSpace(identity.Name) ? location.Duty : identity.Name;
-            var payload = layout.Format == PresetFormat.ModernLayout
-                ? "~Lv2~" + layout.Json
-                : $"{identity.Name}~{layout.Json}";
+            var compact = System.Text.Json.Nodes.JsonNode.Parse(layout.Json)!;
+            if(layout.Format == PresetFormat.ModernLayout) compact["Name"] = identity.Name;
+            var payload = (layout.Format == PresetFormat.ModernLayout ? "~Lv2~" : $"{identity.Name}~") + compact.ToJsonString();
             var fingerprint = LayoutFingerprint(layout.Root, identity.Name);
             var languageDependent = IsLanguageDependent(layout.Root);
             var familyId = BuildFamilyId(PresetKind.Layout, identity.TerritoryIds, title);
+            if(identity.TerritoryIds.Count == 0)
+                familyId = ContentHash.Sha256($"{repository.FullName}:{relativePath}:{familyId}");
+            var sameNameCount = nameCounts.GetValueOrDefault(identity.Name, 1);
             var summary = SummarizeLayout(layout.Root);
             var (score, notes) = Score(repository, PresetKind.Layout, layout.Format,
                 PresetCompatibility.Compatible, identity.TerritoryIds.Count > 0, languageDependent);
@@ -117,7 +123,8 @@ public sealed partial class PresetIndexer
                 confidenceScore: score,
                 confidenceNotes: notes,
                 languageDependent: languageDependent,
-                summary: summary);
+                summary: summary,
+                stableIdentity: $"{familyId}:{(sameNameCount > 1 ? fingerprint : "0")}");
         }
     }
 
@@ -131,18 +138,19 @@ public sealed partial class PresetIndexer
         var root = tree.GetRoot();
         var scriptClass = root.DescendantNodes().OfType<ClassDeclarationSyntax>()
             .FirstOrDefault(x => x.BaseList?.Types.Any(type =>
-                type.Type.ToString().EndsWith("SplatoonScript", StringComparison.Ordinal)) == true);
-        var scriptNamespace = scriptClass?.Ancestors().OfType<BaseNamespaceDeclarationSyntax>().FirstOrDefault()?.Name.ToString() ?? "";
+                IsScriptBase(type.Type)) == true);
+        var scriptNamespace = string.Join('.', scriptClass?.Ancestors().OfType<BaseNamespaceDeclarationSyntax>()
+            .Reverse().Select(x => x.Name.ToString()) ?? []);
         var className = scriptClass?.Identifier.ValueText ?? "";
         var runtimeIdentity = className.Length == 0
             ? ""
             : $"{(scriptNamespace.Length == 0 ? "Default" : scriptNamespace)}@{className}";
         var author = AuthorRegex().Match(content).Groups[1].Value.Trim();
         var title = Path.GetFileNameWithoutExtension(relativePath);
-        var territoryIds = ReadScriptTerritories(root);
+        var territoryIds = ReadScriptTerritories(scriptClass);
         var (compatibility, compatibilityDetail) = ScriptCompatibility(repository, content, scriptClass != null);
         var fingerprint = ContentHash.Sha256(content.Replace("\r\n", "\n", StringComparison.Ordinal).Trim());
-        var familyId = BuildFamilyId(PresetKind.Script, territoryIds, title);
+        var familyId = BuildFamilyId(PresetKind.Script, territoryIds, runtimeIdentity.Length > 0 ? runtimeIdentity : relativePath);
         var (score, notes) = Score(repository, PresetKind.Script, PresetFormat.NativeScript,
             compatibility, territoryIds.Count > 0, false);
 
@@ -185,9 +193,10 @@ public sealed partial class PresetIndexer
         int confidenceScore = 0,
         IReadOnlyList<string>? confidenceNotes = null,
         bool languageDependent = false,
-        PresetContentSummary? summary = null)
+        PresetContentSummary? summary = null,
+        string? stableIdentity = null)
     {
-        var stableSource = $"github:{repository.FullName}:{relativePath}:{kind}:{ordinal}";
+        var stableSource = $"github:{repository.FullName}:{relativePath}:{kind}:{stableIdentity ?? ordinal.ToString()}";
         var id = ContentHash.Sha256(stableSource);
         var repositoryName = repository.DisplayName.Length == 0 ? repository.FullName : repository.DisplayName;
         var sourceUri = $"https://github.com/{repository.FullName}/blob/{repository.Ref}/{Uri.EscapeDataString(relativePath).Replace("%2F", "/")}";
@@ -232,7 +241,8 @@ public sealed partial class PresetIndexer
             ? externalName
             : root.TryGetProperty("Name", out var nameProperty) ? nameProperty.GetString() ?? "" : "";
         var group = root.TryGetProperty("Group", out var groupProperty) ? groupProperty.GetString() ?? "" : "";
-        var territoryIds = root.TryGetProperty("ZoneLockH", out var zoneLock) && zoneLock.ValueKind == JsonValueKind.Array
+        var isBlacklist = root.TryGetProperty("IsZoneBlacklist", out var blacklist) && blacklist.ValueKind == JsonValueKind.True;
+        var territoryIds = !isBlacklist && root.TryGetProperty("ZoneLockH", out var zoneLock) && zoneLock.ValueKind == JsonValueKind.Array
             ? zoneLock.EnumerateArray()
                 .Where(x => x.ValueKind == JsonValueKind.Number && x.TryGetUInt32(out _))
                 .Select(x => x.GetUInt32())
@@ -243,13 +253,29 @@ public sealed partial class PresetIndexer
         return (name, group, territoryIds);
     }
 
-    private static IReadOnlyList<uint> ReadScriptTerritories(Microsoft.CodeAnalysis.SyntaxNode root)
+    private static IReadOnlyList<uint> ReadScriptTerritories(ClassDeclarationSyntax? scriptClass)
     {
-        var property = root.DescendantNodes().OfType<PropertyDeclarationSyntax>()
+        var property = scriptClass?.Members.OfType<PropertyDeclarationSyntax>()
             .FirstOrDefault(x => x.Identifier.ValueText == "ValidTerritories");
         if(property == null) return [];
-        return property.DescendantNodes().OfType<LiteralExpressionSyntax>()
-            .Select(x => x.Token.Value switch
+        var expression = property.ExpressionBody?.Expression ?? property.Initializer?.Value;
+        var getter = property.AccessorList?.Accessors.FirstOrDefault(x => x.IsKind(SyntaxKind.GetAccessorDeclaration));
+        expression ??= getter?.ExpressionBody?.Expression;
+        if(expression == null && getter?.Body?.Statements is { Count: 1 } statements && statements[0] is ReturnStatementSyntax returned)
+            expression = returned.Expression;
+        IEnumerable<ExpressionSyntax>? values = expression switch
+        {
+            CollectionExpressionSyntax collection when collection.Elements.All(x => x is ExpressionElementSyntax)
+                => collection.Elements.Cast<ExpressionElementSyntax>().Select(x => x.Expression),
+            ImplicitObjectCreationExpressionSyntax creation => creation.Initializer?.Expressions,
+            ObjectCreationExpressionSyntax creation when creation.ArgumentList == null || creation.ArgumentList.Arguments.Count == 0
+                => creation.Initializer?.Expressions,
+            _ => null,
+        };
+        if(values == null) return [];
+        var literals = values.ToArray();
+        if(literals.Any(x => x is not LiteralExpressionSyntax literal || !literal.IsKind(SyntaxKind.NumericLiteralExpression))) return [];
+        return literals.Cast<LiteralExpressionSyntax>().Select(x => x.Token.Value switch
             {
                 uint value => value,
                 int value when value > 0 => (uint)value,
@@ -277,6 +303,14 @@ public sealed partial class PresetIndexer
     }
 
     private static bool IsLayout(JsonElement root) => root.ValueKind == JsonValueKind.Object &&
+        (!root.TryGetProperty("Name", out var name) || name.ValueKind == JsonValueKind.String) &&
+        (!root.TryGetProperty("Group", out var group) || group.ValueKind == JsonValueKind.String) &&
+        (!root.TryGetProperty("ZoneLockH", out var zones) || (zones.ValueKind == JsonValueKind.Array &&
+            zones.EnumerateArray().All(x => x.ValueKind == JsonValueKind.Number && x.TryGetUInt32(out _)))) &&
+        (!root.TryGetProperty("ElementsL", out var elements) || (elements.ValueKind == JsonValueKind.Array &&
+            elements.EnumerateArray().All(x => x.ValueKind == JsonValueKind.Object))) &&
+        (!root.TryGetProperty("Elements", out var legacy) || (legacy.ValueKind == JsonValueKind.Object &&
+            legacy.EnumerateObject().All(x => x.Value.ValueKind == JsonValueKind.Object))) &&
         (root.TryGetProperty("ElementsL", out _) || root.TryGetProperty("Elements", out _) ||
          root.TryGetProperty("ZoneLockH", out _) || root.TryGetProperty("Name", out _));
 
@@ -315,7 +349,7 @@ public sealed partial class PresetIndexer
         {
             writer.WriteStartObject();
             writer.WriteString("$name", name);
-            foreach(var property in root.EnumerateObject().Where(x => x.Name is not "Name" and not "Group").OrderBy(x => x.Name, StringComparer.Ordinal))
+            foreach(var property in root.EnumerateObject().Where(x => x.Name is not "Name" and not "Group" and not "PresetHubInstallationId").OrderBy(x => x.Name, StringComparer.Ordinal))
             {
                 writer.WritePropertyName(property.Name);
                 WriteCanonical(writer, property.Value);
@@ -356,20 +390,31 @@ public sealed partial class PresetIndexer
             var hasActorName = root.TryGetProperty("refActorName", out var actorName) &&
                                actorName.ValueKind == JsonValueKind.String &&
                                actorName.GetString() is { Length: > 0 } value && value != "*";
-            var hasIntlActor = root.TryGetProperty("refActorNameIntl", out var actorIntl) && actorIntl.ValueKind == JsonValueKind.Object;
+            var hasIntlActor = root.TryGetProperty("refActorNameIntl", out var actorIntl) && HasTranslations(actorIntl);
             var hasActorId = new[] { "refActorNPCNameID", "refActorNPCID", "refActorDataID", "refActorModelID" }
-                .Any(key => root.TryGetProperty(key, out var id) && id.ValueKind is JsonValueKind.Number or JsonValueKind.Array);
+                .Any(key => root.TryGetProperty(key, out var id) && id.ValueKind == JsonValueKind.Number && id.TryGetUInt32(out var number) && number > 0);
             if(hasActorName && !hasIntlActor && !hasActorId) return true;
 
             var hasMatch = root.TryGetProperty("Match", out var match) && match.ValueKind == JsonValueKind.String &&
                            !string.IsNullOrWhiteSpace(match.GetString());
-            var hasIntlMatch = root.TryGetProperty("MatchIntl", out var matchIntl) && matchIntl.ValueKind == JsonValueKind.Object;
+            var hasIntlMatch = root.TryGetProperty("MatchIntl", out var matchIntl) && HasTranslations(matchIntl);
             if(hasMatch && !hasIntlMatch) return true;
 
             return root.EnumerateObject().Any(x => IsLanguageDependent(x.Value));
         }
         return root.ValueKind == JsonValueKind.Array && root.EnumerateArray().Any(IsLanguageDependent);
     }
+
+    private static bool IsScriptBase(TypeSyntax type) => type switch
+    {
+        SimpleNameSyntax name => name.Identifier.ValueText == "SplatoonScript",
+        QualifiedNameSyntax name => IsScriptBase(name.Right),
+        AliasQualifiedNameSyntax name => IsScriptBase(name.Name),
+        _ => false,
+    };
+
+    private static bool HasTranslations(JsonElement value) => value.ValueKind == JsonValueKind.Object &&
+        value.EnumerateObject().Any(x => x.Value.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(x.Value.GetString()));
 
     private static PresetContentSummary SummarizeLayout(JsonElement root)
     {
@@ -534,7 +579,7 @@ public sealed partial class PresetIndexer
     private sealed record PresetLocation(string Expansion, string Category, string Duty);
     private sealed record ParsedLayout(int Position, PresetFormat Format, JsonElement Root, string Json, string ExternalName);
 
-    [GeneratedRegex(@"(?m)^(?<name>[^\r\n`~]{1,200})~(?=\s*\{)", RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"(?m)^[ \t]*`{0,3}(?<name>[^\r\n`~]{1,200})~(?=\s*\{)", RegexOptions.CultureInvariant)]
     private static partial Regex LegacyLayoutStartRegex();
 
     [GeneratedRegex("new(?:\\s+Metadata)?\\s*\\([^\\)]*?author\\s*:\\s*\\\"([^\\\"]+)\\\"", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]

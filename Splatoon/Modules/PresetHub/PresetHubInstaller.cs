@@ -6,11 +6,22 @@ using Splatoon.Utility;
 
 namespace Splatoon.Modules.PresetHub;
 
-internal sealed class PresetHubInstaller(InstallationRegistry registry)
+internal sealed class PresetHubInstaller(InstallationRegistry registry) : IDisposable
 {
+    private readonly HashSet<string> pendingScripts = [];
+    private bool disposed;
+    public void Dispose() => disposed = true;
     internal IReadOnlyCollection<InstallationRecord> Records => registry.Records;
+    internal IReadOnlyList<PresetEntry> IncludeUnavailableInstallations(IReadOnlyList<PresetEntry> families) =>
+        registry.IncludeUnavailableInstallations(families);
 
-    internal InstallationStatus GetStatus(PresetEntry preset) => registry.GetStatus(preset);
+    internal InstallationStatus GetStatus(PresetEntry preset)
+    {
+        var record = registry.Find(preset);
+        if(record?.Kind == PresetKind.Layout && ManagedLayouts(record).Length == 0)
+            return InstallationStatus.NotInstalled;
+        return registry.GetStatus(preset);
+    }
 
     internal InstallationStatus GetFamilyStatus(PresetEntry family)
     {
@@ -49,28 +60,47 @@ internal sealed class PresetHubInstaller(InstallationRegistry registry)
 
     internal bool InstallLayoutChoice(PresetEntry family, PresetEntry choice, out string message)
     {
+        if(choice.Kind != PresetKind.Layout || choice.Compatibility == PresetCompatibility.Incompatible ||
+           !Choices(family).Any(x => x.Id == choice.Id) || ContentHash.Sha256(choice.Content) != choice.ContentHash)
+        {
+            message = "This layout is unavailable. Refresh the catalogue and try again.";
+            return false;
+        }
         var installedChoice = GetInstalledChoice(family);
         var choiceStatus = GetStatus(choice);
         var previousRecord = installedChoice == null ? registry.Find(choice) : registry.Find(installedChoice);
-        var previousNames = SplitRuntimeIdentity(previousRecord?.RuntimeIdentity);
-        var previousLayouts = P.Config.LayoutsL.Where(x => previousNames.Contains(x.Name)).ToArray();
-        P.Config.LayoutsL.RemoveAll(x => previousNames.Contains(x.Name));
-
-        var imported = Utils.ImportLayouts(choice.Content, silent: true);
-        if(imported.Count == 0)
+        var previousLayouts = P.Config.LayoutsL.ToArray();
+        var previousSelection = LayoutDrawSelector.CurrentLayout;
+        var previousElement = LayoutDrawSelector.CurrentElement;
+        var previousScroll = CGui.ScrollTo;
+        var managed = ManagedLayouts(previousRecord);
+        List<Layout> imported;
+        try
         {
+            P.Config.LayoutsL.RemoveAll(x => managed.Contains(x));
+            imported = Utils.ImportLayouts(choice.Content, silent: true, allowDuplicateNames: false);
+            if(imported.Count != 1)
+                throw new InvalidDataException("The layout could not be imported. Check for an existing layout with the same name.");
+            imported[0].PresetHubInstallationId = Guid.NewGuid().ToString("N");
+            P.Config.Save();
+            registry.MarkInstalled(choice, "hub:" + imported[0].PresetHubInstallationId, installedChoice);
+        }
+        catch(Exception exception)
+        {
+            P.Config.LayoutsL.Clear();
             P.Config.LayoutsL.AddRange(previousLayouts);
-            message = "Splatoon rejected the layout. An existing layout may use the same name.";
+            LayoutDrawSelector.CurrentLayout = previousSelection;
+            LayoutDrawSelector.CurrentElement = previousElement;
+            CGui.ScrollTo = previousScroll;
+            try { P.Config.Save(); } catch(Exception saveException) { saveException.Log(); }
+            exception.Log();
+            message = "Import failed; the previous layouts were restored. " + exception.Message;
             return false;
         }
 
         LayoutDrawSelector.CurrentLayout = imported[^1];
         LayoutDrawSelector.CurrentElement = null;
         foreach(var group in imported.Select(x => x.Group).Where(x => !string.IsNullOrWhiteSpace(x))) CGui.OpenedGroup.Add(group);
-        var runtimeIdentity = string.Join('\n', imported.Select(x => x.Name));
-        if(installedChoice != null && installedChoice.Id != choice.Id) registry.Remove(installedChoice);
-        registry.MarkInstalled(choice, runtimeIdentity);
-        P.Config.Save();
         CleanupStaleLayoutUi();
         message = installedChoice == null
             ? $"Installed {imported.Count} layout(s)."
@@ -109,7 +139,8 @@ internal sealed class PresetHubInstaller(InstallationRegistry registry)
                 : preset.CompatibilityDetail;
             return false;
         }
-        if(report.ContentHash != preset.ContentHash)
+        if(preset.Kind != PresetKind.Script || report.ContentHash != preset.ContentHash ||
+           report.ContentHash != ContentHash.Sha256(preset.Content))
         {
             message = "The script changed after review. Review it again before installing.";
             return false;
@@ -120,8 +151,23 @@ internal sealed class PresetHubInstaller(InstallationRegistry registry)
             return false;
         }
 
-        ScriptingProcessor.CompileAndLoad(preset.Content, null, false, true);
-        registry.MarkInstalled(preset, preset.RuntimeIdentity);
+        var loaded = ScriptingProcessor.Scripts.FirstOrDefault(x => x.InternalData.FullName == preset.RuntimeIdentity);
+        if(loaded != null && !registry.Records.Any(x => x.Kind == PresetKind.Script && x.RuntimeIdentity == preset.RuntimeIdentity))
+        {
+            message = "A manually installed script already uses this identity. Manage it from the Scripts tab.";
+            return false;
+        }
+        if(!pendingScripts.Add(preset.RuntimeIdentity))
+        {
+            message = "This script is already being installed.";
+            return false;
+        }
+        ScriptingProcessor.CompileAndLoad(preset.Content, null, false, true,
+            identity =>
+            {
+                if(!disposed && identity == preset.RuntimeIdentity) registry.MarkInstalled(preset, identity);
+            },
+            () => pendingScripts.Remove(preset.RuntimeIdentity));
         message = "The reviewed script was queued for compilation and installation.";
         return true;
     }
@@ -137,8 +183,7 @@ internal sealed class PresetHubInstaller(InstallationRegistry registry)
 
         if(record.Kind == PresetKind.Layout)
         {
-            var names = SplitRuntimeIdentity(record.RuntimeIdentity);
-            var removedLayouts = P.Config.LayoutsL.Where(x => names.Contains(x.Name)).ToArray();
+            var removedLayouts = ManagedLayouts(record);
             var removedGroups = removedLayouts.Select(x => x.Group).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct().ToArray();
             var removed = P.Config.LayoutsL.RemoveAll(x => removedLayouts.Contains(x));
             if(removedLayouts.Contains(LayoutDrawSelector.CurrentLayout))
@@ -191,8 +236,20 @@ internal sealed class PresetHubInstaller(InstallationRegistry registry)
     }
 
     private static HashSet<string> SplitRuntimeIdentity(string? value) =>
-        value?.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        value?.Split('\n', StringSplitOptions.RemoveEmptyEntries)
             .ToHashSet(StringComparer.Ordinal) ?? [];
+
+    private static Layout[] ManagedLayouts(InstallationRecord? record)
+    {
+        if(record == null) return [];
+        var identities = SplitRuntimeIdentity(record.RuntimeIdentity);
+        // New installations retain ownership after a rename. For legacy records,
+        // refuse ambiguous names rather than removing several unrelated layouts.
+        return identities.Select(identity => identity.StartsWith("hub:", StringComparison.Ordinal)
+                ? P.Config.LayoutsL.Where(x => x.PresetHubInstallationId == identity[4..]).ToArray()
+                : P.Config.LayoutsL.Where(x => x.Name == identity).ToArray())
+            .Where(matches => matches.Length == 1).Select(matches => matches[0]).ToArray();
+    }
 
     private static IReadOnlyList<PresetEntry> Choices(PresetEntry family) =>
         family.Variants.Count > 0 ? family.Variants : [family];

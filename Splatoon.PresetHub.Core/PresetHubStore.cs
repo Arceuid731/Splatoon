@@ -4,7 +4,7 @@ namespace Splatoon.PresetHub.Core;
 
 public sealed class PresetHubStore
 {
-    private const int CurrentCuratedCatalogVersion = 1;
+    private const int CurrentCuratedCatalogVersion = 2;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         WriteIndented = true,
@@ -20,9 +20,10 @@ public sealed class PresetHubStore
 
     public IReadOnlyList<RepositoryDefinition> LoadRepositories()
     {
-        var repositories = Load<List<RepositoryDefinition>>("repositories.json") ?? [];
+        var savedRepositories = Load<List<RepositoryDefinition>>("repositories.json");
+        var repositories = savedRepositories ?? [];
         var catalogVersion = Load<int?>("repository-catalog-version.json") ?? 0;
-        if(catalogVersion < CurrentCuratedCatalogVersion)
+        if(savedRepositories == null || catalogVersion < CurrentCuratedCatalogVersion)
         {
             foreach(var curated in RepositoryDefinition.CuratedCatalog())
             {
@@ -33,22 +34,7 @@ public sealed class PresetHubStore
                 {
                     repositories.Add(curated);
                 }
-                else
-                {
-                    var existing = repositories[existingIndex];
-                    repositories[existingIndex] = curated with
-                    {
-                        Id = existing.Id,
-                        Enabled = existing.Enabled,
-                        Ref = existing.Ref,
-                        PathPrefixes = existing.PathPrefixes.Count == 0 && curated.PathPrefixes.Count > 0
-                            ? curated.PathPrefixes
-                            : existing.PathPrefixes,
-                        ExcludedPathPrefixes = existing.ExcludedPathPrefixes.Count == 0
-                            ? curated.ExcludedPathPrefixes
-                            : existing.ExcludedPathPrefixes,
-                    };
-                }
+                // Existing sources retain all user settings, including script restrictions.
             }
             SaveRepositories(repositories);
             Save("repository-catalog-version.json", CurrentCuratedCatalogVersion);

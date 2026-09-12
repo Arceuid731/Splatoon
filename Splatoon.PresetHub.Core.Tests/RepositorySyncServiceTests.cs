@@ -35,8 +35,40 @@ public sealed class RepositorySyncServiceTests : IDisposable
         if(Directory.Exists(directory)) Directory.Delete(directory, true);
     }
 
+    [Fact]
+    public async Task ChangedFiltersInvalidateCacheAtTheSameRevision()
+    {
+        var handler = new GitHubHandler();
+        var store = new PresetHubStore(directory);
+        var service = new RepositorySyncService(new(new HttpClient(handler)), new(), store);
+        var repository = RepositoryDefinition.OfficialSplatoon();
+        await service.SyncAsync(repository, cancellationToken: TestContext.Current.CancellationToken);
+        var filtered = await service.SyncAsync(repository with { ExcludedPathPrefixes = ["Presets/"] }, cancellationToken: TestContext.Current.CancellationToken);
+        Assert.Empty(filtered.Presets);
+        Assert.Equal(2, handler.TreeRequests);
+    }
+
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public async Task FailedRefreshPreservesPreviousSnapshot(bool truncated, bool oversized)
+    {
+        var handler = new GitHubHandler();
+        var store = new PresetHubStore(directory);
+        var service = new RepositorySyncService(new(new HttpClient(handler)), new(), store);
+        var repository = RepositoryDefinition.OfficialSplatoon();
+        var original = await service.SyncAsync(repository, cancellationToken: TestContext.Current.CancellationToken);
+        handler.Truncated = truncated;
+        handler.Oversized = oversized;
+        await Assert.ThrowsAsync<InvalidDataException>(() => service.SyncAsync(repository, true, TestContext.Current.CancellationToken));
+        Assert.Equal(original.SyncedAt, store.LoadSnapshot(repository.Id)!.SyncedAt);
+        Assert.Equal(2, store.LoadSnapshot(repository.Id)!.Presets.Count);
+    }
+
     private sealed class GitHubHandler : HttpMessageHandler
     {
+        internal bool Truncated { get; set; }
+        internal bool Oversized { get; set; }
         internal int CommitRequests { get; private set; }
         internal int TreeRequests { get; private set; }
         internal int RawRequests { get; private set; }
@@ -55,6 +87,7 @@ public sealed class RepositorySyncServiceTests : IDisposable
             if(request.RequestUri.Host == "api.github.com")
             {
                 TreeRequests++;
+                if(Truncated) return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("{\"truncated\":true,\"tree\":[]}") });
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
                 {
                     Content = new StringContent(
@@ -65,6 +98,7 @@ public sealed class RepositorySyncServiceTests : IDisposable
             }
 
             RawRequests++;
+            if(Oversized) return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(new string('x', 2 * 1024 * 1024 + 1)) });
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent(request.RequestUri.AbsolutePath.EndsWith("Legacy.txt", StringComparison.Ordinal)

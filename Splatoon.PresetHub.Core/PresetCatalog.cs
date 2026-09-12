@@ -41,8 +41,8 @@ public static class PresetCatalog
     private static PresetEntry CollapseExactDuplicates(IGrouping<string, PresetEntry> group)
     {
         var representative = group
-            .OrderByDescending(SourcePriority)
-            .ThenBy(x => x.Compatibility)
+            .OrderBy(x => x.Compatibility)
+            .ThenByDescending(SourcePriority)
             .ThenByDescending(x => x.ConfidenceScore)
             .ThenBy(x => x.RepositoryName, StringComparer.OrdinalIgnoreCase)
             .First();

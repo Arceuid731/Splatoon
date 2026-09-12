@@ -1,20 +1,20 @@
 {
-		"Author": "NightmareXIV; Preset Hub integration by Arceuid731",
-		"Name": "Splatoon (Preset Hub)",
-		"Punchline": "Splatoon with curated, comparable duty presets.",
-		"Description": "A custom Splatoon build with Preset Hub V2.2: shared variant comparison, multi-preset duty installation, exact duty-entry suggestions, managed installation, and explicit C# security review.",
-		"Tags": [
-				"Utility",
-				"Accessibility"
-		],
-		"InternalName": "Splatoon",
-		"RepoUrl": "https://github.com/Arceuid731/Splatoon",
-		"ApplicableVersion": "any",
-		"LastUpdate": 1684437468,
-		"DownloadLinkInstall": "https://github.com/Arceuid731/Splatoon/releases/download/preset-hub-v2.0.0/Splatoon-PresetHub-3.9.2.26.zip",
-		"DownloadLinkUpdate": "https://github.com/Arceuid731/Splatoon/releases/download/preset-hub-v2.0.0/Splatoon-PresetHub-3.9.2.26.zip",
-		"DownloadLinkTesting": "https://github.com/Arceuid731/Splatoon/releases/download/preset-hub-v2.0.0/Splatoon-PresetHub-3.9.2.26.zip",
-		"AcceptsFeedback": true,
-		"IconUrl": "https://love.puni.sh/resources/splatoon.png",
-		"DalamudApiLevel": 15
+  "Author": "NightmareXIV; Preset Hub integration by Arceuid731",
+  "Name": "Splatoon (Preset Hub)",
+  "Punchline": "Find and install presets for your duties.",
+  "Description": "Browse community layouts and scripts, compare versions, and install matching presets when entering a duty.",
+  "Tags": [
+    "Utility",
+    "Accessibility"
+  ],
+  "InternalName": "Splatoon",
+  "RepoUrl": "https://github.com/Arceuid731/Splatoon",
+  "ApplicableVersion": "any",
+  "LastUpdate": 1684437468,
+  "DownloadLinkInstall": "https://github.com/Arceuid731/Splatoon/releases/download/preset-hub-v2.2.0/Splatoon-PresetHub-3.9.2.29.zip",
+  "DownloadLinkUpdate": "https://github.com/Arceuid731/Splatoon/releases/download/preset-hub-v2.2.0/Splatoon-PresetHub-3.9.2.29.zip",
+  "DownloadLinkTesting": "https://github.com/Arceuid731/Splatoon/releases/download/preset-hub-v2.2.0/Splatoon-PresetHub-3.9.2.29.zip",
+  "AcceptsFeedback": true,
+  "IconUrl": "https://love.puni.sh/resources/splatoon.png",
+  "DalamudApiLevel": 15
 }

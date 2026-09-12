@@ -5,7 +5,7 @@ public sealed class RepositorySyncService(
     PresetIndexer indexer,
     PresetHubStore store)
 {
-    public const int CurrentIndexVersion = 4;
+    public const int CurrentIndexVersion = 5;
 
     public async Task<RepositorySnapshot> SyncAsync(
         RepositoryDefinition repository,
@@ -14,7 +14,8 @@ public sealed class RepositorySyncService(
     {
         var revision = await client.GetRevisionAsync(repository, cancellationToken).ConfigureAwait(false);
         var cached = store.LoadSnapshot(repository.Id);
-        if(!force && cached?.Revision == revision && cached.IndexVersion == CurrentIndexVersion) return cached;
+        if(!force && cached?.Revision == revision && cached.IndexVersion == CurrentIndexVersion &&
+           System.Text.Json.JsonSerializer.Serialize(cached.Repository) == System.Text.Json.JsonSerializer.Serialize(repository)) return cached;
 
         var files = await client.DownloadIndexableFilesAsync(repository, revision, cancellationToken).ConfigureAwait(false);
         var snapshot = new RepositorySnapshot
@@ -25,6 +26,7 @@ public sealed class RepositorySyncService(
             SyncedAt = DateTimeOffset.UtcNow,
             Presets = indexer.Index(repository, files),
         };
+        cancellationToken.ThrowIfCancellationRequested();
         store.SaveSnapshot(snapshot);
         return snapshot;
     }

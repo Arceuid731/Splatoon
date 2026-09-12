@@ -92,6 +92,15 @@ public sealed record RepositoryDefinition
         Community("errerer-ffxiv-splpresets", "Errerer", "FFXIV_SPLPresets", false,
             allowScriptInstallation: false),
         Community("thakyz-spl-presets", "thakyZ", "SPL_Presets", false),
+        Community("hibiya615-splatoon-presets", "Hibiya615", "Splatoon_Presets", true, ["[EN Set]/"],
+            allowScriptInstallation: false),
+        Community("leathen94-presets", "Leathen-94", "Presets", true, allowScriptInstallation: false),
+        Community("sourpuh-presets", "sourpuh", "SplatoonPresets", true, allowScriptInstallation: false),
+        Community("nebulousbyte-presets", "NebulousByte", "SplatoonPresets", true, allowScriptInstallation: false),
+        Community("redasteroid-eurekaorthos", "RedAsteroid", "EurekaOrthos_Presets", true, allowScriptInstallation: false),
+        Community("lujiejie-eurekaorthos", "Lu-Jiejie", "Eureka-Orthos-Presets", true, allowScriptInstallation: false),
+        Community("misauo-presets", "MisaUo", "SplatoonPresets", true, allowScriptInstallation: false),
+        Community("okukatsu-presets", "OkuKatsu", "Splatoon-Presets", true, allowScriptInstallation: false),
     ];
 
     private static RepositoryDefinition Community(
@@ -185,6 +194,7 @@ public sealed record RepositorySnapshot
 
 public sealed record InstallationRecord
 {
+    public PresetEntry? Preset { get; init; }
     public required string PresetId { get; init; }
     public required PresetKind Kind { get; init; }
     public required string ContentHash { get; init; }

@@ -17,5 +17,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Splatoon.PresetHub.Core\Splatoon.PresetHub.Core.csproj" />
+    <Compile Include="..\Splatoon\Modules\PresetHub\PresetHubInstaller.cs" Link="Runtime\PresetHubInstaller.cs" />
   </ItemGroup>
 </Project>

@@ -1200,7 +1200,7 @@ public static unsafe class Utils
         return s.Replace(",", "_").Replace("~", "_");
     }
 
-    public static List<Layout> ImportLayouts(string ss, bool silent = false)
+    public static List<Layout> ImportLayouts(string ss, bool silent = false, bool allowDuplicateNames = true)
     {
         var layouts = new List<Layout>();
         var strings = ss.Split("\n", StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
@@ -1214,10 +1214,11 @@ public static unsafe class Utils
                     var l = JsonConvert.DeserializeObject<Layout>(s);
                     l.Name = l.Name.SanitizeName();
                     var lname = l.Name;
-                    if(P.Config.LayoutsL.Any(x => x.Name == lname) && !ImGui.GetIO().KeyCtrl)
+                    if(P.Config.LayoutsL.Any(x => x.Name == lname) && (!allowDuplicateNames || !ImGui.GetIO().KeyCtrl))
                     {
                         throw new Exception("Error: this name already exists.\nTo override, hold CTRL.");
                     }
+                    l.PresetHubInstallationId = "";
                     P.Config.LayoutsL.Add(l);
                     CGui.ScrollTo = l;
                     if(!silent)
@@ -1235,6 +1236,9 @@ public static unsafe class Utils
                     }
 
                     var l = DeserializeLegacyLayout(str);
+                    if(!allowDuplicateNames && P.Config.LayoutsL.Any(x => x.Name == l.Name))
+                        throw new Exception("A layout with this name already exists.");
+                    l.PresetHubInstallationId = "";
                     P.Config.LayoutsL.Add(l);
                     CGui.ScrollTo = l;
                     layouts.Add(l);

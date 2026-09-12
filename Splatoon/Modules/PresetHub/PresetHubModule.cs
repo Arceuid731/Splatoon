@@ -1,4 +1,5 @@
 using Dalamud.Game.ClientState.Conditions;
+using System.Net.Http;
 using Dalamud.Plugin.Services;
 using ECommons.GameHelpers.LegacyPlayer;
 using ECommons.ExcelServices;
@@ -20,12 +21,18 @@ internal sealed class PresetHubModule : IDisposable
     private bool catalogDirty = true;
     private readonly PresetHubDutyPromptWindow dutyPromptWindow;
     private DutyPromptPreferences dutyPromptPreferences;
-    private uint pendingTerritory;
-    private long pendingTerritorySince;
+    private readonly DutyPromptScheduler promptScheduler = new();
+    private readonly System.Threading.CancellationTokenSource lifetime = new();
+    private readonly HttpClient httpClient = new() { Timeout = TimeSpan.FromSeconds(30) };
+    private Task syncTask = Task.CompletedTask;
+    private bool syncRequested;
+    private bool forceRequested;
+    private bool disposed;
+    private volatile bool syncing;
 
     internal PresetHubInstaller Installer { get; }
     internal ScriptSecurityAnalyzer SecurityAnalyzer { get; } = new();
-    internal bool IsSyncing { get; private set; }
+    internal bool IsSyncing => syncing;
     internal string LastMessage { get; private set; } = "Using local cache.";
 
     internal PresetHubModule()
@@ -39,8 +46,10 @@ internal sealed class PresetHubModule : IDisposable
             if(snapshot != null) snapshots[repository.Id] = snapshot;
         }
 
-        syncService = new(new(P.HttpClient), new(), store);
-        Installer = new(new(store));
+        syncService = new(new(httpClient), new(), store);
+        var registry = new InstallationRegistry(store);
+        registry.RememberPresets(snapshots.Values.SelectMany(x => x.Presets));
+        Installer = new(registry);
         dutyPromptPreferences = store.LoadDutyPromptPreferences();
         dutyPromptWindow = new(this);
         EzConfigGui.WindowSystem.AddWindow(dutyPromptWindow);
@@ -83,11 +92,21 @@ internal sealed class PresetHubModule : IDisposable
     internal IReadOnlyList<PresetEntry> GetDutySuggestions(uint territoryId) =>
         DutyPresetMatcher.FindSuggestions(Presets, territoryId, Installer.GetFamilyStatus);
 
+    internal IReadOnlyList<PresetEntry> InstalledPresets =>
+        Installer.IncludeUnavailableInstallations(Presets).Select(ResolveFamilyTerritoryMetadata).ToArray();
+
+    internal IReadOnlyDictionary<string, string> RecommendDutyLayouts(uint territoryId, IReadOnlyList<PresetEntry> suggestions) =>
+        DutyLayoutSelection.Recommend(suggestions,
+            InstalledPresets.SelectMany(x => x.Variants.Count > 0 ? x.Variants : [x])
+                .Where(x => x.Kind == PresetKind.Layout && x.TerritoryIds.Contains(territoryId) &&
+                            Installer.GetStatus(x) == InstallationStatus.Installed));
+
     internal void SetDutyPromptsEnabled(bool enabled)
     {
         dutyPromptPreferences = dutyPromptPreferences with { Enabled = enabled };
         store.SaveDutyPromptPreferences(dutyPromptPreferences);
         if(!enabled) dutyPromptWindow.IsOpen = false;
+        else SchedulePrompt(Svc.ClientState.TerritoryType);
     }
 
     internal void SetDutySuppressed(uint territoryId, bool suppressed)
@@ -98,6 +117,7 @@ internal sealed class PresetHubModule : IDisposable
         dutyPromptPreferences = dutyPromptPreferences with { SuppressedTerritoryIds = territories };
         store.SaveDutyPromptPreferences(dutyPromptPreferences);
         if(suppressed && dutyPromptWindow.TerritoryId == territoryId) dutyPromptWindow.IsOpen = false;
+        if(!suppressed) SchedulePrompt(Svc.ClientState.TerritoryType);
     }
 
     private void OnTerritoryChanged(uint territoryId)
@@ -108,69 +128,93 @@ internal sealed class PresetHubModule : IDisposable
 
     private void SchedulePrompt(uint territoryId)
     {
-        pendingTerritory = territoryId;
-        pendingTerritorySince = Environment.TickCount64;
+        promptScheduler.Schedule(territoryId);
     }
 
     private void OnFrameworkUpdate(IFramework framework)
     {
-        if(pendingTerritory == 0 || IsSyncing || !dutyPromptPreferences.Enabled) return;
-        if(Environment.TickCount64 - pendingTerritorySince > 30_000 || Svc.ClientState.TerritoryType != pendingTerritory)
+        var territoryId = Svc.ClientState.TerritoryType;
+        if(!promptScheduler.ShouldCheck(territoryId,
+               Svc.ClientState.IsLoggedIn && Player.Available && Svc.Condition[ConditionFlag.BoundByDuty],
+               dutyPromptPreferences.Enabled)) return;
+        if(dutyPromptPreferences.SuppressedTerritoryIds.Contains(territoryId))
         {
-            pendingTerritory = 0;
+            promptScheduler.CompleteCheck(false, false);
             return;
         }
-        if(!Svc.ClientState.IsLoggedIn || !Player.Available || !Svc.Condition[ConditionFlag.BoundByDuty]) return;
-
-        var territoryId = pendingTerritory;
-        pendingTerritory = 0;
-        if(dutyPromptPreferences.SuppressedTerritoryIds.Contains(territoryId)) return;
         var suggestions = GetDutySuggestions(territoryId);
+        promptScheduler.CompleteCheck(suggestions.Count > 0, IsSyncing);
         if(suggestions.Count > 0) dutyPromptWindow.Show(territoryId, suggestions);
     }
 
-    internal async Task SyncAllAsync(bool force = false)
+    internal Task SyncAllAsync(bool force = false)
     {
         lock(gate)
         {
-            if(IsSyncing) return;
-            IsSyncing = true;
+            if(disposed) return Task.CompletedTask;
+            syncRequested = true;
+            forceRequested |= force;
+            if(IsSyncing) return syncTask;
+            syncing = true;
             LastMessage = "Refreshing repositories...";
+            return syncTask = Task.Run(SyncLoopAsync);
         }
+    }
 
+    private async Task SyncLoopAsync()
+    {
         var errors = new List<string>();
         try
         {
-            foreach(var repository in Repositories.Where(x => x.Enabled))
+            while(true)
             {
-                try
+                RepositoryDefinition[] requested;
+                bool force;
+                lock(gate)
                 {
-                    var snapshot = await syncService.SyncAsync(repository, force).ConfigureAwait(false);
-                    lock(gate)
-                    {
-                        snapshots[repository.Id] = snapshot;
-                        catalogDirty = true;
-                    }
+                    if(!syncRequested || disposed) break;
+                    syncRequested = false;
+                    force = forceRequested;
+                    forceRequested = false;
+                    requested = repositories.Where(x => x.Enabled).ToArray();
                 }
-                catch(Exception exception)
+                errors.Clear();
+                foreach(var repository in requested)
                 {
-                    errors.Add($"{repository.FullName}: {exception.Message}");
-                    exception.Log();
+                    lifetime.Token.ThrowIfCancellationRequested();
+                    try
+                    {
+                        var snapshot = await syncService.SyncAsync(repository, force, lifetime.Token).ConfigureAwait(false);
+                        lock(gate)
+                        {
+                            if(disposed || !repositories.Contains(repository)) continue;
+                            snapshots[repository.Id] = snapshot;
+                            catalogDirty = true;
+                        }
+                    }
+                    catch(OperationCanceledException) when(lifetime.IsCancellationRequested) { throw; }
+                    catch(Exception exception)
+                    {
+                        errors.Add(repository.FullName);
+                        exception.Log();
+                    }
                 }
             }
         }
+        catch(OperationCanceledException) when(lifetime.IsCancellationRequested) { }
         finally
         {
             lock(gate)
             {
-                IsSyncing = false;
+                syncing = false;
                 var enabledIds = repositories.Where(x => x.Enabled).Select(x => x.Id).ToHashSet(StringComparer.Ordinal);
                 var rawPresets = snapshots.Values.Where(x => enabledIds.Contains(x.Repository.Id)).SelectMany(x => x.Presets).ToArray();
                 var result = PresetCatalog.Create(rawPresets);
                 LastMessage = errors.Count == 0
-                    ? $"Index ready: {result.Families.Count} preset families · {result.DistinctChoices} choices · " +
-                      $"{result.ExactDuplicatesCollapsed} duplicate copies collapsed."
-                    : $"Cache kept; refresh failed for {errors.Count} repository(s): {string.Join(" | ", errors)}";
+                    ? $"{result.Families.Count} presets available · {result.DistinctChoices} versions."
+                    : $"Refresh failed: {string.Join(", ", errors)}. Showing saved presets.";
+                // A request can arrive between the loop's last check and this lock.
+                if(syncRequested && !disposed) _ = SyncAllAsync();
             }
         }
     }
@@ -183,14 +227,15 @@ internal sealed class PresetHubModule : IDisposable
         {
             if(!uri.Host.Equals("github.com", StringComparison.OrdinalIgnoreCase))
             {
-                error = "Only github.com repositories are supported in V1.";
+                error = "Use a github.com repository.";
                 return false;
             }
             normalized = uri.AbsolutePath.Trim('/');
         }
 
         var parts = normalized.Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        if(parts.Length != 2)
+        if(parts.Length != 2 || parts.Any(part => part is "." or ".." ||
+            !System.Text.RegularExpressions.Regex.IsMatch(part, @"^[A-Za-z0-9_.-]+$")))
         {
             error = "Use owner/repository or a GitHub repository URL.";
             return false;
@@ -199,7 +244,7 @@ internal sealed class PresetHubModule : IDisposable
         var id = $"{parts[0]}-{parts[1]}".ToLowerInvariant();
         lock(gate)
         {
-            if(repositories.Any(x => x.Id == id))
+            if(repositories.Any(x => x.Id == id || x.FullName.Equals(normalized, StringComparison.OrdinalIgnoreCase)))
             {
                 error = "This repository is already configured.";
                 return false;
@@ -217,7 +262,7 @@ internal sealed class PresetHubModule : IDisposable
             });
             store.SaveRepositories(repositories);
         }
-        _ = SyncAllAsync(force: true);
+        _ = SyncAllAsync();
         return true;
     }
 
@@ -231,7 +276,7 @@ internal sealed class PresetHubModule : IDisposable
             catalogDirty = true;
             store.SaveRepositories(repositories);
         }
-        if(enabled) _ = SyncAllAsync(force: true);
+        if(enabled) _ = SyncAllAsync();
     }
 
     internal void RemoveRepository(string repositoryId)
@@ -247,6 +292,11 @@ internal sealed class PresetHubModule : IDisposable
 
     public void Dispose()
     {
+        lock(gate) disposed = true;
+        lifetime.Cancel();
+        httpClient.Dispose();
+        _ = syncTask.ContinueWith(_ => lifetime.Dispose(), TaskScheduler.Default);
+        Installer.Dispose();
         Svc.ClientState.TerritoryChanged -= OnTerritoryChanged;
         Svc.Framework.Update -= OnFrameworkUpdate;
         EzConfigGui.WindowSystem.RemoveWindow(dutyPromptWindow);

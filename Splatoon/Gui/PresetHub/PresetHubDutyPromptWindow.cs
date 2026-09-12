@@ -31,8 +31,7 @@ internal sealed class PresetHubDutyPromptWindow(PresetHubModule hub) : Window(
     {
         var dutyName = ExcelTerritoryHelper.GetName(TerritoryId, true);
         ImGui.TextUnformatted($"Preset Hub found presets for {dutyName}");
-        ImGuiEx.TextWrapped("Recommended layout versions are preselected. Compare alternatives when needed, choose several presets, " +
-                            "then confirm once. Nothing is installed automatically; C# scripts always require a separate security review.");
+        ImGuiEx.TextWrapped("A selection is ready to install. Other versions remain available below.");
         ImGui.Separator();
 
         if(ImGui.BeginTable("DutyPresetSuggestions", 5,
@@ -110,12 +109,13 @@ internal sealed class PresetHubDutyPromptWindow(PresetHubModule hub) : Window(
         }
 
         if(!string.IsNullOrWhiteSpace(actionMessage)) ImGuiEx.TextWrapped(ImGuiColors.DalamudYellow, actionMessage);
-        if(ImGui.Button("Select all recommended"))
+        if(ImGui.Button("Recommended selection"))
         {
-            foreach(var family in suggestions.Where(x => x.Kind == PresetKind.Layout))
+            selectedFamilies.Clear();
+            foreach(var recommendation in hub.RecommendDutyLayouts(TerritoryId, suggestions))
             {
-                selectedFamilies.Add(family.Id);
-                selectedChoices[family.Id] = PresetVariantSelector.Recommended(family).Id;
+                selectedFamilies.Add(recommendation.Key);
+                selectedChoices[recommendation.Key] = recommendation.Value;
             }
         }
         ImGui.SameLine();
@@ -157,12 +157,13 @@ internal sealed class PresetHubDutyPromptWindow(PresetHubModule hub) : Window(
         suggestions = dutySuggestions;
         selectedFamilies.Clear();
         selectedChoices.Clear();
+        var recommended = hub.RecommendDutyLayouts(TerritoryId, suggestions);
         foreach(var family in suggestions)
         {
-            var previousChoice = previousChoices?.GetValueOrDefault(family.Id);
+            var previousChoice = previousChoices?.GetValueOrDefault(family.Id) ?? recommended.GetValueOrDefault(family.Id);
             selectedChoices[family.Id] = PresetVariantSelector.Resolve(family, previousChoice).Id;
             if(family.Kind == PresetKind.Layout &&
-               (selectAllLayouts || previousSelected?.Contains(family.Id) == true))
+               ((selectAllLayouts && recommended.ContainsKey(family.Id)) || previousSelected?.Contains(family.Id) == true))
                 selectedFamilies.Add(family.Id);
         }
         if(suggestions.All(x => x.Id != expandedFamilyId)) expandedFamilyId = "";

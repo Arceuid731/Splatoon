@@ -78,7 +78,7 @@ internal static class TabPresetHub
         ImGui.SameLine();
         DrawNullableEnumCombo("Status", ref statusFilter);
 
-        var presets = hub.Presets;
+        var presets = installedOnly ? hub.InstalledPresets : hub.Presets;
         if(DrawStringCombo("Expansion", ref expansionFilter, presets.Select(x => x.Expansion)))
         {
             categoryFilter = "";
@@ -93,7 +93,7 @@ internal static class TabPresetHub
         ImGui.SameLine();
         if(ImGui.Button(hub.IsSyncing ? "Refreshing..." : "Refresh") && !hub.IsSyncing)
         {
-            _ = hub.SyncAllAsync(force: true);
+            _ = hub.SyncAllAsync();
         }
 
         ImGui.TextDisabled(hub.LastMessage);
@@ -282,7 +282,7 @@ internal static class TabPresetHub
 
     private static void DrawRepositories(PresetHubModule hub)
     {
-        ImGuiEx.TextWrapped("Preset Hub downloads GitHub archives into Splatoon's local configuration cache. Disabling a repository keeps its current cache; removing it hides its indexed presets.");
+        ImGuiEx.TextWrapped("Choose the sources to include in your catalogue.");
         if(ImGui.BeginTable("PresetHubRepositories", 6, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingStretchProp))
         {
             ImGui.TableSetupColumn("Enabled", ImGuiTableColumnFlags.WidthFixed, 65f.Scale());
@@ -324,7 +324,7 @@ internal static class TabPresetHub
         ImGui.SetNextItemWidth(100f.Scale());
         ImGui.InputTextWithHint("##ref", "branch/tag", ref referenceInput, 100);
         ImGui.SetNextItemWidth(360f.Scale());
-        ImGui.InputTextWithHint("##paths", "Optional roots separated by ; (empty scans recursively)", ref pathsInput, 500);
+        ImGui.InputTextWithHint("##paths", "Folders, separated by ; (optional)", ref pathsInput, 500);
         ImGui.SameLine();
         if(ImGui.Button("Add and index"))
         {
@@ -342,7 +342,7 @@ internal static class TabPresetHub
         var preferences = hub.DutyPromptPreferences;
         var enabled = preferences.Enabled;
         if(ImGui.Checkbox("Suggest matching presets when entering a duty", ref enabled)) hub.SetDutyPromptsEnabled(enabled);
-        ImGuiEx.TextWrapped("The prompt only appears when Preset Hub finds a layout or script for the exact in-game territory and an install or update is available. Nothing is installed automatically.");
+        ImGuiEx.TextWrapped("Choose available presets and updates when entering a duty.");
 
         ImGui.Separator();
         ImGui.TextUnformatted("Duties where suggestions are hidden");

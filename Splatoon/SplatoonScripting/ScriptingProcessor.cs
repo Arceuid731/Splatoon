@@ -24,7 +24,7 @@ internal unsafe static partial class ScriptingProcessor
 {
     private static ImmutableList<SplatoonScript> ScriptsInternal = [];
     internal static IReadOnlyList<SplatoonScript> Scripts => ScriptsInternal;
-    internal static ConcurrentQueue<(string code, string path)> LoadScriptQueue = new();
+    internal static ConcurrentQueue<(string code, string path, bool ignoreCache, Action<string> onLoaded, Action onFinished)> LoadScriptQueue = new();
     internal static volatile bool ThreadIsRunning = false;
     internal static readonly string[] TrustedURLs =
     [
@@ -310,10 +310,11 @@ internal unsafe static partial class ScriptingProcessor
         }
     }
 
-    internal static void CompileAndLoad(string sourceCode, string fpath, bool isFirst, bool ignoreCache = false)
+    internal static void CompileAndLoad(string sourceCode, string fpath, bool isFirst, bool ignoreCache = false,
+        Action<string> onLoaded = null, Action onFinished = null)
     {
         PluginLog.Debug($"Requested script loading");
-        LoadScriptQueue.Enqueue((sourceCode, fpath));
+        LoadScriptQueue.Enqueue((sourceCode, fpath, ignoreCache, onLoaded, onFinished));
         if(!ThreadIsRunning)
         {
             ThreadIsRunning = true;
@@ -343,7 +344,7 @@ internal unsafe static partial class ScriptingProcessor
                                     var cacheFile = Path.Combine(scriptCacheDirectory, $"{md5}-{P.loader.splatoonVersion}.bin");
                                     var cacheFilePdb = Path.Combine(scriptCacheDirectory, $"{md5}-{P.loader.splatoonVersion}.pdb");
                                     PluginLog.Debug($"Cache path: {cacheFile}, {cacheFilePdb}");
-                                    if(!ignoreCache && File.Exists(cacheFile) && File.Exists(cacheFilePdb))
+                                    if(!result.ignoreCache && File.Exists(cacheFile) && File.Exists(cacheFilePdb))
                                     {
                                         PluginLog.Debug($"Loading from cache...");
                                         code = File.ReadAllBytes(cacheFile);
@@ -379,7 +380,7 @@ internal unsafe static partial class ScriptingProcessor
                                             var assembly = Compiler.Load(code, pdb);
                                             foreach(var t in assembly.GetTypes())
                                             {
-                                                if(t.BaseType.IsAssignableTo(typeof(SplatoonScript)))
+                                                if(t.BaseType?.IsAssignableTo(typeof(SplatoonScript)) == true)
                                                 {
                                                     var instance = (SplatoonScript)assembly.CreateInstance(t.FullName);
                                                     instance.InternalData = new(result.path, instance)
@@ -433,6 +434,7 @@ internal unsafe static partial class ScriptingProcessor
                                                     PluginLog.Debug($"Load success");
                                                     if(fpath != null) P.ScriptUpdateWindow.FailedScripts_Remove(fpath);
                                                     instance.UpdateState();
+                                                    result.onLoaded?.Invoke(instance.InternalData.FullName);
                                                 }
                                             }
                                         }
@@ -457,6 +459,11 @@ internal unsafe static partial class ScriptingProcessor
                             catch(Exception e)
                             {
                                 e.Log();
+                            }
+                            finally
+                            {
+                                if(result.onFinished != null)
+                                    Svc.Framework.RunOnFrameworkThread(result.onFinished).Wait();
                             }
                             idleCount = 0;
                         }

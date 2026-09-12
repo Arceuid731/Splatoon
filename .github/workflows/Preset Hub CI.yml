@@ -7,6 +7,10 @@ on:
       - "Splatoon.PresetHub.Core.Tests/**"
       - "Splatoon/Modules/PresetHub/**"
       - "Splatoon/Gui/PresetHub/**"
+      - "Splatoon/Serializables/Layout.cs"
+      - "Splatoon/SplatoonScripting/ScriptingProcessor.cs"
+      - "Splatoon/Utility/Utils.cs"
+      - "Splatoon/Splatoon.csproj"
       - ".github/workflows/Preset Hub CI.yml"
   pull_request:
     paths:
@@ -14,6 +18,10 @@ on:
       - "Splatoon.PresetHub.Core.Tests/**"
       - "Splatoon/Modules/PresetHub/**"
       - "Splatoon/Gui/PresetHub/**"
+      - "Splatoon/Serializables/Layout.cs"
+      - "Splatoon/SplatoonScripting/ScriptingProcessor.cs"
+      - "Splatoon/Utility/Utils.cs"
+      - "Splatoon/Splatoon.csproj"
       - ".github/workflows/Preset Hub CI.yml"
   workflow_dispatch:
 

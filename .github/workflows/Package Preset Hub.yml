@@ -28,16 +28,24 @@ jobs:
       - name: Build plugin package
         shell: pwsh
         run: dotnet build Splatoon/Splatoon.csproj --configuration Release -p:Platform=x64 -p:DalamudLibPath="$env:DALAMUD_PATH/"
+      - name: Test Preset Hub
+        shell: pwsh
+        run: dotnet test Splatoon.PresetHub.Core.Tests/Splatoon.PresetHub.Core.Tests.csproj --configuration Release
       - name: Collect package
+        id: package
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force artifacts | Out-Null
           $package = Get-ChildItem Splatoon/bin/Release -Recurse -Filter latest.zip | Select-Object -First 1
           if ($null -eq $package) { throw "DalamudPackager did not produce latest.zip" }
-          Copy-Item $package.FullName artifacts/Splatoon-PresetHub-3.9.2.26.zip
+          [xml]$project = Get-Content Splatoon/Splatoon.csproj
+          $version = ($project.Project.PropertyGroup | Where-Object Version | Select-Object -First 1).Version
+          if ([string]::IsNullOrWhiteSpace($version)) { throw "Missing plugin version" }
+          Copy-Item $package.FullName "artifacts/Splatoon-PresetHub-$version.zip"
+          "version=$version" >> $env:GITHUB_OUTPUT
       - uses: actions/upload-artifact@v7
         with:
-          name: Splatoon-PresetHub-3.9.2.26
-          path: artifacts/Splatoon-PresetHub-3.9.2.26.zip
+          name: Splatoon-PresetHub-${{ steps.package.outputs.version }}
+          path: artifacts/Splatoon-PresetHub-${{ steps.package.outputs.version }}.zip
           if-no-files-found: error
           retention-days: 14

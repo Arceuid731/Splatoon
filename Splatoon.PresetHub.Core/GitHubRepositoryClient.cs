@@ -37,7 +37,7 @@ public sealed class GitHubRepositoryClient(HttpClient httpClient)
         using var document = await JsonDocument.ParseAsync(treeStream, cancellationToken: cancellationToken).ConfigureAwait(false);
         if(document.RootElement.TryGetProperty("truncated", out var truncated) && truncated.GetBoolean())
         {
-            throw new InvalidDataException("GitHub truncated the repository tree; narrow the configured path prefixes.");
+            throw new InvalidDataException("GitHub returned an incomplete repository tree. The previous index was kept.");
         }
 
         var paths = document.RootElement.GetProperty("tree")
@@ -60,7 +60,19 @@ public sealed class GitHubRepositoryClient(HttpClient httpClient)
             try
             {
                 var rawUri = $"https://raw.githubusercontent.com/{repository.Owner}/{repository.Name}/{revision}/{Uri.EscapeDataString(path).Replace("%2F", "/")}";
-                var content = await httpClient.GetStringAsync(rawUri, cancellationToken).ConfigureAwait(false);
+                using var file = await httpClient.GetAsync(rawUri, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+                file.EnsureSuccessStatusCode();
+                if(file.Content.Headers.ContentLength > MaxFileBytes) throw new InvalidDataException($"File exceeds 2 MiB: {path}");
+                await using var stream = await file.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+                using var buffer = new MemoryStream();
+                var chunk = new byte[8192];
+                int count;
+                while((count = await stream.ReadAsync(chunk, cancellationToken).ConfigureAwait(false)) > 0)
+                {
+                    if(buffer.Length + count > MaxFileBytes) throw new InvalidDataException($"File exceeds 2 MiB: {path}");
+                    buffer.Write(chunk, 0, count);
+                }
+                var content = System.Text.Encoding.UTF8.GetString(buffer.ToArray()).TrimStart('\uFEFF');
                 return (RelativePath: path, Content: content);
             }
             finally

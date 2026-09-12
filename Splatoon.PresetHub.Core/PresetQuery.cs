@@ -43,12 +43,15 @@ public static class PresetQuery
         if(options.Expansion.Length > 0 && !Comparer.Equals(preset.Expansion, options.Expansion)) return false;
         if(options.Category.Length > 0 && !Comparer.Equals(preset.Category, options.Category)) return false;
         if(options.Duty.Length > 0 && !Comparer.Equals(preset.Duty, options.Duty)) return false;
-        if(options.Search.Length == 0) return true;
+        var search = options.Search.Trim();
+        if(search.Length == 0) return true;
 
-        var values = new[] { preset.Title, preset.Author, preset.Duty, preset.Category, preset.Expansion, preset.RepositoryName }
-            .Concat(preset.Variants.SelectMany(x => new[] { x.RepositoryName, x.RelativePath, x.Author }));
+        var values = new[] { preset.Title, preset.Author, preset.Duty, preset.Category, preset.Expansion, preset.RepositoryName, preset.RelativePath }
+            .Concat(preset.TerritoryIds.Select(x => x.ToString()))
+            .Concat(preset.Sources.Select(x => x.RepositoryName))
+            .Concat(preset.Variants.SelectMany(x => new[] { x.Title, x.RepositoryName, x.RelativePath, x.Author }));
         return values
-            .Any(value => value.Contains(options.Search, StringComparison.OrdinalIgnoreCase));
+            .Any(value => value.Contains(search, StringComparison.OrdinalIgnoreCase));
     }
 
     private static IOrderedEnumerable<PresetEntry> Sort(

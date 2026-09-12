@@ -14,6 +14,7 @@ public class Layout
     [NonSerialized] public bool? ConditionalStatus = null;
     [DefaultValue(true)] public bool Enabled = true;
     [DefaultValue("")] public string Name = "";
+    [DefaultValue("")] public string PresetHubInstallationId = "";
     public InternationalString InternationalName = new();
     [DefaultValue("")] public string Description = "";
     public InternationalString InternationalDescription = new();

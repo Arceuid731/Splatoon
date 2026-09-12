@@ -30,9 +30,9 @@ public sealed class InstallationRegistryTests : IDisposable
 
         var repositories = new PresetHubStore(directory).LoadRepositories();
 
-        Assert.Equal(9, repositories.Count);
+        Assert.Equal(17, repositories.Count);
         Assert.Equal("punishxiv-splatoon", repositories[0].Id);
-        Assert.Equal(5, repositories.Count(x => x.Enabled));
+        Assert.Equal(13, repositories.Count(x => x.Enabled));
     }
 
     public void Dispose()
