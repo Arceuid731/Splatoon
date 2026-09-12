@@ -1,8 +1,8 @@
 {
   "Author": "NightmareXIV; Preset Hub integration by Arceuid731",
   "Name": "Splatoon (Preset Hub)",
-  "Punchline": "Find and install presets for your duties.",
-  "Description": "Browse community layouts and scripts, compare versions, and install matching presets when entering a duty.",
+  "Punchline": "Community overlays, organized by mechanic.",
+  "Description": "Build coverage from your sources, enable aids by encounter and mechanic, and preview their drawings. Review scripted aids from the source library.",
   "Tags": [
     "Utility",
     "Accessibility"
@@ -11,9 +11,9 @@
   "RepoUrl": "https://github.com/Arceuid731/Splatoon",
   "ApplicableVersion": "any",
   "LastUpdate": 1684437468,
-  "DownloadLinkInstall": "https://github.com/Arceuid731/Splatoon/releases/download/preset-hub-v2.2.0/Splatoon-PresetHub-3.9.2.29.zip",
-  "DownloadLinkUpdate": "https://github.com/Arceuid731/Splatoon/releases/download/preset-hub-v2.2.0/Splatoon-PresetHub-3.9.2.29.zip",
-  "DownloadLinkTesting": "https://github.com/Arceuid731/Splatoon/releases/download/preset-hub-v2.2.0/Splatoon-PresetHub-3.9.2.29.zip",
+  "DownloadLinkInstall": "https://github.com/Arceuid731/Splatoon/releases/download/preset-hub-v3.0.0/Splatoon-PresetHub-3.9.2.30.zip",
+  "DownloadLinkUpdate": "https://github.com/Arceuid731/Splatoon/releases/download/preset-hub-v3.0.0/Splatoon-PresetHub-3.9.2.30.zip",
+  "DownloadLinkTesting": "https://github.com/Arceuid731/Splatoon/releases/download/preset-hub-v3.0.0/Splatoon-PresetHub-3.9.2.30.zip",
   "AcceptsFeedback": true,
   "IconUrl": "https://love.puni.sh/resources/splatoon.png",
   "DalamudApiLevel": 15

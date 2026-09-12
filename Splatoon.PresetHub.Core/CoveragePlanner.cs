@@ -30,8 +30,23 @@ public static class CoveragePlanner
                 .ThenByDescending(x => x.ElementCount)
                 .ThenBy(x => x.Id, StringComparer.Ordinal).First()).ToArray();
         var selected = new List<CoverageContribution>();
+        var forcedIds = preferences.SelectedAlternatives.Values.Reverse().ToArray();
+        var forcedAids = new HashSet<string>();
+        foreach(var id in forcedIds)
+        {
+            var candidate = candidates.FirstOrDefault(x => x.Id == id);
+            if(candidate == null || Aids(candidate).Any(forcedAids.Contains)) continue;
+            selected.Add(candidate);
+            forcedAids.UnionWith(Aids(candidate));
+        }
+        foreach(var local in candidates.Where(x => x.Local).OrderByDescending(x => Aids(x).Count()).ThenBy(x => x.Id, StringComparer.Ordinal))
+        {
+            if(Aids(local).Any(forcedAids.Contains)) continue;
+            selected.Add(local);
+            forcedAids.UnionWith(Aids(local));
+        }
         var complete = true;
-        foreach(var component in Components(candidates))
+        foreach(var component in Components(candidates.Where(x => !Aids(x).Any(forcedAids.Contains)).ToArray()))
         {
             var result = Solve(component);
             selected.AddRange(result.Items);

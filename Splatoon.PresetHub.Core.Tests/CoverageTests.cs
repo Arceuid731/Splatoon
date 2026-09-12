@@ -163,6 +163,7 @@ public sealed class CoverageTests
         var after = builder.Build([first], TestContext.Current.CancellationToken);
         Assert.Same(before.Contributions.Single(x => x.SourcePresetId == first.Id), Assert.Single(after.Contributions));
         Assert.NotEqual(before.SourceRevision, after.SourceRevision);
+        Assert.Equal(after.Contributions[0].Id, Assert.Single(after.PreparedSelections[387]));
         Assert.Throws<OperationCanceledException>(() => builder.Build([first], new CancellationToken(true)));
     }
 
@@ -183,5 +184,100 @@ public sealed class CoverageTests
             Assert.False(restarted.LoadCoveragePreferences().Allows(saved.Contributions[0]));
         }
         finally { Directory.Delete(directory, true); }
+    }
+
+    [Fact]
+    public void TranslatedCaptureNamesAreEquivalentButStoredReferencesRemainIntact()
+    {
+        PresetEntry WithCapture(string source, string label) => Preset(source,
+            "{\"Name\":\"" + label + "\",\"type\":1,\"radius\":0,\"Nodraw\":true,\"IsCapturing\":true,\"refActorComparisonType\":7,\"refActorVFXPath\":\"marker.avfx\"}," +
+            Element(3060, ",\"FaceMe\":true,\"faceplayer\":\"<element:" + label + ">\"") + "," + Element(3061));
+        var english = LayoutCoverageAnalyzer.Analyze(WithCapture("english", "Capture"));
+        var chinese = LayoutCoverageAnalyzer.Analyze(WithCapture("chinese", "捕捉"));
+        Assert.Equal(2, english.Contributions.Count);
+        Assert.Equal(2, CoveragePlanner.Compute(english.Contributions.Concat(chinese.Contributions), 387).Selected.Count);
+        Assert.Equal(english.Contributions.Single(x => x.Linked).Claims[0].AidId,
+            chinese.Contributions.Single(x => x.Linked).Claims[0].AidId);
+        Assert.Contains("<element:Capture>", JsonNode.Parse(english.Contributions.Single(x => x.Linked).LayoutContent[5..])!["ElementsL"]![1]!["faceplayer"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public void DifferentConditionalGuardsAreNotDeclaredEquivalent()
+    {
+        var bare = LayoutCoverageAnalyzer.Analyze(Preset("bare", Element(1))).Contributions.Single();
+        var guarded = LayoutCoverageAnalyzer.Analyze(Preset("guarded",
+            "{\"type\":1,\"Nodraw\":true,\"Conditional\":true,\"refActorRequireBuff\":true,\"refActorBuffId\":[420]}," + Element(1))).Contributions.Single();
+        Assert.NotEqual(bare.Claims[0].AidId, guarded.Claims[0].AidId);
+        Assert.Equal(bare.Claims[0].MechanicId, guarded.Claims[0].MechanicId);
+    }
+
+    [Fact]
+    public void AnExplicitAlternativeIsRespectedEvenWhenItChangesTheCombination()
+    {
+        var seed = LayoutCoverageAnalyzer.Analyze(Preset("seed", Element(1))).Contributions.Single();
+        CoverageContribution Item(string id, params string[] keys) => seed with
+        { Id = id, Claims = keys.Select(key => seed.Claims[0] with { AidId = key, MechanicId = key }).ToArray() };
+        var linked = Item("linked", "a", "b");
+        var alternate = Item("alternate", "a", "c", "d");
+        var preferences = new CoveragePreferences { SelectedAlternatives = new() { [CoveragePlanner.CoverageKey(linked)] = linked.Id } };
+        var plan = CoveragePlanner.Compute([linked, alternate], 387, preferences);
+        Assert.Equal(linked.Id, Assert.Single(plan.Selected).Id);
+    }
+
+    [Fact]
+    public void InstalledGlobalAidIsListedInCurrentTerritoryWithoutIgnoringABlacklist()
+    {
+        var global = Preset("global", Element(1)) with { TerritoryIds = [], Content = "~Lv2~{\"Name\":\"global\",\"ElementsL\":[" + Element(1) + "]}" };
+        Assert.Empty(LayoutCoverageAnalyzer.Analyze(global).Contributions);
+        Assert.Equal(387u, Assert.Single(LayoutCoverageAnalyzer.AnalyzeInstalled(global, 387).Contributions).TerritoryId);
+        var blacklist = global with { Content = global.Content[..^1] + ",\"IsZoneBlacklist\":true,\"ZoneLockH\":[387]}" };
+        Assert.Empty(LayoutCoverageAnalyzer.AnalyzeInstalled(blacklist, 387).Contributions);
+        Assert.Single(LayoutCoverageAnalyzer.AnalyzeInstalled(blacklist, 851).Contributions);
+    }
+
+    [Fact]
+    public void FixedCoordinateDrawingsDoNotUseStaleActorCastFilters()
+    {
+        var fixedElement = Element(3060).Replace("\"type\":1", "\"type\":0").Replace("[3060]", "[3060,3061]");
+        Assert.Empty(LayoutCoverageAnalyzer.ActiveSignals(fixedElement));
+        var contribution = Assert.Single(LayoutCoverageAnalyzer.Analyze(Preset("fixed", fixedElement)).Contributions);
+        Assert.Empty(contribution.Claims[0].Signals);
+        Assert.Empty(contribution.Claims[0].ActorKey);
+        Assert.Equal(1, contribution.ElementCount);
+    }
+
+    [Fact]
+    public void InactiveTimeAndDistanceValuesDoNotCreateDuplicateVariants()
+    {
+        var plain = Preset("plain", Element(1));
+        var stale = Preset("stale", Element(1, ",\"refActorCastTimeMax\":7,\"DistanceSourceX\":123,\"refActorBuffTimeMax\":6"));
+        var plan = CoveragePlanner.Compute(new[] { plain, stale }.SelectMany(x => LayoutCoverageAnalyzer.Analyze(x).Contributions), 387);
+        Assert.Single(plan.Selected);
+    }
+
+    [Fact]
+    public void EquivalentStatusSetsDoNotDependOnArrayOrderOrNumericFormatting()
+    {
+        var first = "{\"type\":1,\"refActorType\":1,\"refActorRequireBuff\":true,\"refActorBuffId\":[420,421],\"refActorUseBuffTime\":true,\"refActorBuffTimeMax\":5.0}";
+        var second = first.Replace("[420,421]", "[421,420]").Replace("5.0", "5");
+        Assert.Single(CoveragePlanner.Compute(new[] { Preset("first", first), Preset("second", second) }
+            .SelectMany(x => LayoutCoverageAnalyzer.Analyze(x).Contributions), 387).Selected);
+    }
+
+    [Fact]
+    public void ExtraStatusConditionDoesNotResetTheAttackOptOut()
+    {
+        var plain = LayoutCoverageAnalyzer.Analyze(Preset("plain", Element(1))).Contributions.Single();
+        var constrained = LayoutCoverageAnalyzer.Analyze(Preset("constrained", Element(1, ",\"refActorRequireBuff\":true,\"refActorBuffId\":[420]"))).Contributions.Single();
+        Assert.Equal(plain.Claims[0].MechanicId, constrained.Claims[0].MechanicId);
+        Assert.NotEqual(plain.Claims[0].AidId, constrained.Claims[0].AidId);
+    }
+
+    [Fact]
+    public void BroaderLinkedPackCannotSilentlyReplaceLocalChanges()
+    {
+        var local = LayoutCoverageAnalyzer.Analyze(Preset("local", Element(1))).Contributions.Single() with { Local = true };
+        var broader = local with { Id = "broader", Local = false, Claims = [local.Claims[0], local.Claims[0] with { AidId = "extra", MechanicId = "extra" }] };
+        Assert.Equal(local.Id, Assert.Single(CoveragePlanner.Compute([local, broader], 387).Selected).Id);
     }
 }

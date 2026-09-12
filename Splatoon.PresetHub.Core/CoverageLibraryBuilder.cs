@@ -27,11 +27,20 @@ public sealed class CoverageLibraryBuilder
             diagnostics.AddRange(saved.Analysis.Diagnostics);
         }
         foreach(var stale in cache.Keys.Where(x => !retained.Contains(x)).ToArray()) cache.Remove(stale);
+        var distinct = contributions.DistinctBy(x => x.Id).OrderBy(x => x.TerritoryId).ThenBy(x => x.Id, StringComparer.Ordinal).ToArray();
+        var prepared = new Dictionary<uint, IReadOnlyList<string>>();
+        foreach(var territory in distinct.GroupBy(x => x.TerritoryId))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var plan = CoveragePlanner.Compute(territory, territory.Key);
+            prepared[territory.Key] = plan.Selected.Select(x => x.Id).ToArray();
+            if(!plan.SearchComplete) diagnostics.Add($"Territory {territory.Key}: combination search reached its limit");
+        }
         return new()
         {
             ComputedAt = DateTimeOffset.UtcNow,
             SourceRevision = ContentHash.Sha256(string.Join('\n', presets.Select(x => x.Id + ":" + cache[x.Id].Revision))),
-            Contributions = contributions.DistinctBy(x => x.Id).OrderBy(x => x.TerritoryId).ThenBy(x => x.Id, StringComparer.Ordinal).ToArray(),
+            Contributions = distinct, PreparedSelections = prepared,
             Diagnostics = diagnostics,
         };
     }

@@ -7,19 +7,19 @@ Pas de dépendance à Foretell. Publication de la version finale demandée par Y
 
 ## Exigences à vérifier avant publication
 
-- [ ] Hibiya entier, préférence linguistique au niveau du contenu, cache incrémental.
-- [ ] Analyse des conditions actives, acteurs, actions, statuts, autres événements.
-- [ ] Déduplication des aides équivalentes, conservation des aides complémentaires.
-- [ ] Préservation des dépendances, conditions de layout et groupes de dessins liés.
-- [ ] Recalcul global et remplacement des contributions obsolètes sans perte d'aides.
-- [ ] Prise en compte et protection des installations existantes et modifications locales.
-- [ ] Bibliothèque persistante, activation par instance / rencontre / mécanique mémorisée.
-- [ ] Hiérarchie des instances du jeu, filtres, rencontres identifiées et autres aides.
-- [ ] Aucune prétention d'exhaustivité des boss et mécaniques.
-- [ ] Aperçu isolé des dessins ; limites des conditions dynamiques explicites.
-- [ ] Popup d'entrée de couverture, aucune installation à choisir, toutes les aides du hub visibles.
-- [ ] Suppression du badge Recommended et du flux de sélection de presets par défaut.
-- [ ] Tests du moteur, persistance, intégration et régression sur les sources réelles.
+- [x] Hibiya entier, préférence linguistique au niveau du contenu, cache incrémental.
+- [x] Analyse des conditions actives, acteurs, actions, statuts, autres événements.
+- [x] Déduplication structurelle des aides équivalentes, conservation des rôles complémentaires.
+- [x] Préservation des dépendances internes, conditions de layout et groupes liés.
+- [x] Recalcul global et remplacement des contributions obsolètes ; sauvegardes conservées.
+- [x] Protection des installations existantes et modifications locales.
+- [x] Bibliothèque persistante, activation par instance / rencontre / mécanique mémorisée.
+- [x] Hiérarchie des instances du jeu, filtres, rencontres identifiées et autres aides.
+- [x] Aucune prétention d'exhaustivité des boss et mécaniques.
+- [x] Aperçu isolé des dessins ; limites des conditions dynamiques explicites.
+- [x] Popup de couverture sans installation ; aides non classées et scripts présentés.
+- [x] Suppression du badge Recommended et du flux de sélection de presets par défaut.
+- [x] Tests moteur, persistance, intégration et audit des sources réelles.
 - [ ] Build plugin, revue de l'interface, package, publication et manifeste in-game vérifiés.
 
 ## Principes d'implémentation
@@ -55,7 +55,7 @@ Premier audit réel : 7 851 exports, 66 337 contributions, 505 territoires, envi
 prouve pas encore l'équivalence sémantique de toutes les variantes. Eden E3 conserve
 un écart de 8 aides disponibles / 7 retenues dû aux dépendances : à examiner.
 
-77 tests core passent (10 nouveaux). Le plugin compile. La nouvelle vue Coverage,
+Ce premier état a été suivi de tests supplémentaires. La nouvelle vue Coverage,
 le panneau d'entrée sans installation et l'aperçu ImGui sont raccordés mais doivent
 encore être revus/testés. Pas de publication, pas de modification de la configuration
 du jeu. L'ancienne version de package ne correspond pas à ce travail en cours.
@@ -71,3 +71,32 @@ Points à traiter avant toute livraison :
 - Ajouter tests persistance, incrémental, migration et runtime ; revue complète des flux UI.
 - Retirer code de sélection de presets devenu inutilisé ; mettre à jour docs et version.
 - Packaging, publication approuvée par la demande finale, manifeste et disponibilité en jeu.
+
+## Vérification avant release v3.0.0
+
+96 tests passent après retrait des huit tests de l'ancien sélecteur remplacé. Les
+tests runtime compilent directement `PresetHubCoverage.cs` et `PresetHubInstaller.cs` :
+source désactivée, échec de préparation, remplacement conservant la sauvegarde,
+modification locale, opt-out initial, activation par territoire et scripts gérés.
+Les tests géométriques vérifient les conventions du renderer, anneaux, cônes,
+extrémités de lignes, recul et éléments de capture sans dessin.
+
+L'audit de 7 851 exports a traité 505 territoires en environ six secondes. Aucun
+conflit d'AidId dans les sélections ni dépassement du budget de recherche. Les 70
+diagnostics sont des sources sans territoire explicite : elles ne sont pas supposées
+globalement applicables. Les installations globales préexistantes sont en revanche
+présentées et contrôlées dans leur zone courante. Aucun renvoi de capture externe
+à un autre layout n'a été trouvé dans les caches analysés.
+
+Eden E3 : 7 aides identifiées, 7 retenues, 14 alternatives. Le faux écart de la
+première passe provenait des noms de capture traduits ; les signatures sont désormais
+normalisées par leurs conditions. L'analyse structurelle n'est pas une validation
+de la stratégie ou du timing de chaque auteur.
+
+Revue des flux UI : tableaux pour les libellés longs, accès direct à l'aperçu,
+contrôles mémorisés, choix avancés réversibles, erreurs de synchronisation visibles,
+aucun ancien bouton Install dans les lignes de sources de layouts. Pas de rendu
+capturé dans un client FFXIV ni de test de combat exécuté pendant cette session.
+
+La publication et la vérification du manifeste public restent à consigner après
+réussite des workflows et contrôle du zip distribué.

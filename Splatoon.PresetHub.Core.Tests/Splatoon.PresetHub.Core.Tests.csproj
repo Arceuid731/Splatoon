@@ -8,6 +8,7 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.0.1" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
     <PackageReference Include="xunit.v3" Version="3.2.2" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5">
       <PrivateAssets>all</PrivateAssets>
@@ -18,5 +19,6 @@
   <ItemGroup>
     <ProjectReference Include="..\Splatoon.PresetHub.Core\Splatoon.PresetHub.Core.csproj" />
     <Compile Include="..\Splatoon\Modules\PresetHub\PresetHubInstaller.cs" Link="Runtime\PresetHubInstaller.cs" />
+    <Compile Include="..\Splatoon\Modules\PresetHub\PresetHubCoverage.cs" Link="Runtime\PresetHubCoverage.cs" />
   </ItemGroup>
 </Project>

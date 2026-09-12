@@ -9,6 +9,26 @@ namespace Splatoon.PresetHub.Core;
 /// </summary>
 public static class LayoutCoverageAnalyzer
 {
+    /// <summary>Scope an already-installed global/blacklist layout to the current
+    /// territory without broadening its original activation conditions.</summary>
+    public static CoverageAnalysis AnalyzeInstalled(PresetEntry preset, uint territory)
+    {
+        if(preset.TerritoryIds.Count > 0) return Analyze(preset);
+        try
+        {
+            var start = preset.Content.IndexOf('{');
+            if(start < 0 || JsonNode.Parse(preset.Content[start..]) is not JsonObject root) return new([], []);
+            var zones = Ids(root, "ZoneLockH").ToArray();
+            var allowed = Bool(root, "IsZoneBlacklist") ? !zones.Contains(territory) : zones.Length == 0 || zones.Contains(territory);
+            if(!allowed) return new([], []);
+            root["IsZoneBlacklist"] = false;
+            root["ZoneLockH"] = new JsonArray(JsonValue.Create(territory));
+            var content = "~Lv2~" + root.ToJsonString();
+            return Analyze(preset with { Content = content, ContentHash = ContentHash.Sha256(content), TerritoryIds = [territory] });
+        }
+        catch(JsonException) { return new([], []); }
+    }
+
     // These fields affect rendering, not the event that selects an actor. Different
     // renderings with the same predicates are alternatives within the same aid role.
     private static readonly HashSet<string> Appearance = new(StringComparer.Ordinal)
@@ -53,8 +73,9 @@ public static class LayoutCoverageAnalyzer
                 {
                     // An OR-list of casts can be split without changing its meaning.
                     // Inverted tests and all linked layouts keep the original predicate.
-                    var fragments = parts.Where(x => !x.Linked).SelectMany(x => x.Elements).Where(IsDrawing).SelectMany(SplitCasts)
-                        .Select(element => (Element: element, Claims: Claims(root, element, territory).ToArray()));
+                    var fragments = parts.Where(x => !x.Linked).SelectMany(x => x.Elements).Where(IsDrawing)
+                        .SelectMany(original => SplitCasts(original).Select(element =>
+                            (Element: element, Claims: Claims(root, element, territory, original).ToArray())));
                     foreach(var group in fragments.GroupBy(x => string.Join('|', x.Claims.Select(c => c.AidId).Order())))
                     {
                         var fragmentElements = group.Select(x => x.Element).ToArray();
@@ -113,17 +134,19 @@ public static class LayoutCoverageAnalyzer
         };
     }
 
-    private static IEnumerable<CoverageClaim> Claims(JsonObject root, JsonObject element, uint territory)
+    private static IEnumerable<CoverageClaim> Claims(JsonObject root, JsonObject element, uint territory, JsonObject? original = null)
     {
         var (actorKey, nameId) = Actor(element);
         var signals = Signals(element).Distinct().OrderBy(x => x.Key, StringComparer.Ordinal).ToArray();
-        var eventKey = signals.Length > 0 ? string.Join('+', signals.Select(x => x.Key)) : "ambient";
+        var primary = signals.Any(x => x.Kind == "Action") ? signals.Where(x => x.Kind == "Action").ToArray() : signals;
+        var eventKey = primary.Length > 0 ? string.Join('+', primary.Select(x => x.Key)) : "ambient";
         var mechanicId = ContentHash.Sha256($"{territory}:{actorKey}:{eventKey}");
         var predicate = Predicate(element);
+        NormalizeReferences(predicate, root, []);
         var shell = (JsonObject)root.DeepClone();
         foreach(var field in new[] { "Name", "Group", "InternationalName", "Description", "InternationalDescription",
                     "PresetHubInstallationId", "Elements", "ElementsL", "ZoneLockH" }) shell.Remove(field);
-        var condition = Canonical(shell) + Canonical(predicate);
+        var condition = Canonical(shell) + Canonical(predicate) + ConditionalGuard(root, original ?? element);
         var title = Text(element, "Name");
         if(title.Length == 0) title = signals.Length > 0 ? string.Join(" / ", signals.Select(x => x.Key)) : "Other aid";
         var roles = new List<string>();
@@ -151,12 +174,25 @@ public static class LayoutCoverageAnalyzer
     {
         var result = (JsonObject)element.DeepClone();
         foreach(var field in Appearance) result.Remove(field);
+        if(Int(element, "type") is not (1 or 3 or 4))
+            foreach(var field in result.Select(x => x.Key).Where(x => x.StartsWith("refActor", StringComparison.Ordinal)).ToArray()) result.Remove(field);
         // Values left behind by a disabled editor checkbox are not predicates.
         RemoveUnless(result, Bool(element, "refActorRequireCast"), "refActorCastId", "refActorCastReverse", "refActorUseCastTime",
             "refActorCastTimeMin", "refActorCastTimeMax", "refActorUseOvercast");
         RemoveUnless(result, Bool(element, "refActorRequireBuff"), "refActorBuffId", "refActorRequireAllBuffs",
             "refActorRequireBuffsInvert", "refActorUseBuffTime", "refActorBuffTimeMin", "refActorBuffTimeMax",
             "refActorUseBuffParam", "refActorBuffParam");
+        RemoveUnless(result, Bool(element, "refActorUseCastTime"), "refActorCastTimeMin", "refActorCastTimeMax");
+        RemoveUnless(result, Bool(element, "refActorUseBuffTime"), "refActorBuffTimeMin", "refActorBuffTimeMax");
+        RemoveUnless(result, Bool(element, "refActorUseBuffParam"), "refActorBuffParam");
+        RemoveUnless(result, Bool(element, "refActorObjectLife"), "refActorLifetimeMin", "refActorLifetimeMax");
+        RemoveUnless(result, Bool(element, "refActorUseTransformation"), "refActorTransformationID");
+        RemoveUnless(result, Bool(element, "LimitDistance"), "DistanceMin", "DistanceMax", "DistanceSourceX", "DistanceSourceY", "DistanceSourceZ",
+            "DistanceSourcePlaceholder", "UseDistanceSourcePlaceholder", "LimitDistanceInvert");
+        RemoveUnless(result, Bool(element, "LimitRotation"), "RotationMin", "RotationMax");
+        RemoveUnless(result, Bool(element, "UseHitboxRadius"), "HitboxRadiusMin", "HitboxRadiusMax");
+        foreach(var field in new[] { "refActorCastId", "refActorBuffId", "ObjectKinds", "AnimationIds", "refActorPlaceholder" })
+            if(result[field] is JsonArray values) result[field] = new JsonArray(values.OrderBy(Canonical, StringComparer.Ordinal).Select(x => x?.DeepClone()).ToArray());
         if(!Bool(element, "refActorComparisonAnd"))
         {
             var fields = new[] { "refActorName", "refActorModelID", "refActorObjectID", "refActorDataID", "refActorNPCID",
@@ -171,11 +207,31 @@ public static class LayoutCoverageAnalyzer
         return result;
     }
 
+    private static string ConditionalGuard(JsonObject root, JsonObject target)
+    {
+        var conditions = new List<string>();
+        foreach(var element in Elements(root))
+        {
+            // A reset acts before drawing the resetting element itself.
+            if(Bool(element, "Conditional") && Bool(element, "ConditionalReset")) conditions.Clear();
+            if(ReferenceEquals(element, target)) break;
+            if(Bool(element, "Conditional"))
+            {
+                var predicate = Predicate(element);
+                NormalizeReferences(predicate, root, []);
+                conditions.Add(Canonical(predicate));
+            }
+        }
+        return string.Join('|', conditions);
+    }
+
     public static IReadOnlyList<CoverageSignal> ActiveSignals(string elementJson) =>
         Signals(JsonNode.Parse(elementJson)!.AsObject()).Distinct().ToArray();
 
     private static IEnumerable<CoverageSignal> Signals(JsonObject element)
     {
+        // Fixed-coordinate shapes bypass character matching in both renderers.
+        if(Int(element, "type") is not (1 or 3 or 4)) yield break;
         if(Bool(element, "refActorRequireCast") && !Bool(element, "refActorCastReverse"))
             foreach(var id in Ids(element, "refActorCastId")) yield return new("Action", id.ToString());
         if(Bool(element, "refActorRequireBuff") && !Bool(element, "refActorRequireBuffsInvert"))
@@ -191,13 +247,13 @@ public static class LayoutCoverageAnalyzer
             yield return new("Tether", $"{element["refActorTetherParam1"]}/{element["refActorTetherParam2"]}/{element["refActorTetherParam3"]}");
         if(!Bool(element, "AnimationInverted"))
             foreach(var id in Ids(element, "AnimationIds")) yield return new("Animation", id.ToString());
-        if(!Bool(element, "MapEffectInvert") && Nonempty(element, "MapEffects"))
-            yield return new("MapEffect", Canonical(element["MapEffects"]));
+        // MapEffects is serialized by Element but is not a runtime predicate in
+        // this upstream version; do not advertise those values as coverage.
     }
 
     private static (string Key, uint NameId) Actor(JsonObject element)
     {
-        if(Int(element, "refActorType") != 0) return ("", 0);
+        if(Int(element, "type") is not (1 or 3 or 4) || Int(element, "refActorType") != 0) return ("", 0);
         var all = Bool(element, "refActorComparisonAnd");
         var comparison = Int(element, "refActorComparisonType");
         foreach(var (mode, field) in new[] { (6, "refActorNPCNameID"), (4, "refActorNPCID"), (3, "refActorDataID") })
@@ -213,28 +269,74 @@ public static class LayoutCoverageAnalyzer
     {
         if(Bool(root, "UseTriggers") || Nonempty(root, "Subconfigurations") || Bool(root, "Freezing") ||
            Nonempty(root, "BlacklistedProjectorActions") || Nonempty(root, "ForcedProjectorActions") ||
-           root["ProjectionState"] != null || elements.Any(e => Bool(e, "IsCapturing")) ||
-           root.ToJsonString().Contains("element:", StringComparison.OrdinalIgnoreCase)) return [(elements, true)];
-        var result = new List<(IReadOnlyList<JsonObject>, bool)>();
-        List<JsonObject>? dependent = null;
-        foreach(var element in elements)
+           root["ProjectionState"] != null) return [(elements, true)];
+        var parent = Enumerable.Range(0, elements.Count).ToArray();
+        int Find(int i) => parent[i] == i ? i : parent[i] = Find(parent[i]);
+        void Join(int a, int b) => parent[Find(b)] = Find(a);
+        var conditional = -1;
+        for(var i = 0; i < elements.Count; i++)
         {
-            if(Bool(element, "Conditional") && (dependent == null || Bool(element, "ConditionalReset")))
+            var element = elements[i];
+            if(Bool(element, "Conditional") && (conditional < 0 || Bool(element, "ConditionalReset"))) conditional = i;
+            if(conditional >= 0) Join(conditional, i);
+            foreach(var reference in References(element))
             {
-                if(dependent != null) result.Add((dependent, true));
-                dependent = [];
+                var parts = reference[1..^1].Split(':');
+                if(parts.Length > 3 || parts.Length == 3 && parts[1] != Text(root, "Name"))
+                    return [(elements, true)]; // External dependency: retain its original scope.
+                var target = parts[^1];
+                var matches = Enumerable.Range(0, elements.Count).Where(j => Text(elements[j], "Name") == target).ToArray();
+                if(matches.Length != 1) return [(elements, true)];
+                Join(i, matches[0]);
             }
-            if(dependent == null) result.Add((new[] { element }, false));
-            else dependent.Add(element);
         }
-        if(dependent != null) result.Add((dependent, true));
-        return result;
+        return Enumerable.Range(0, elements.Count).GroupBy(Find).Select(group =>
+        {
+            var part = group.Select(i => elements[i]).ToArray();
+            return ((IReadOnlyList<JsonObject>)part, part.Length > 1 || part.Any(e => Bool(e, "Conditional") || Bool(e, "IsCapturing")));
+        }).ToArray();
     }
+
+    private static IEnumerable<string> References(JsonNode? node)
+    {
+        if(node is JsonObject obj) return obj.SelectMany(x => References(x.Value));
+        if(node is JsonArray array) return array.SelectMany(References);
+        if(node is JsonValue value && value.TryGetValue<string>(out var text))
+            return System.Text.RegularExpressions.Regex.Matches(text, @"<element:[^>]+>").Select(x => x.Value);
+        return [];
+    }
+
+    private static void NormalizeReferences(JsonNode? node, JsonObject root, HashSet<string> visited)
+    {
+        if(node is JsonObject obj)
+            foreach(var property in obj.ToArray())
+                if(property.Value is JsonValue value && value.TryGetValue<string>(out var text)) obj[property.Key] = NormalizeText(text, root, visited);
+                else NormalizeReferences(property.Value, root, visited);
+        else if(node is JsonArray array)
+            for(var i = 0; i < array.Count; i++)
+                if(array[i] is JsonValue value && value.TryGetValue<string>(out var text)) array[i] = NormalizeText(text, root, visited);
+                else NormalizeReferences(array[i], root, visited);
+    }
+
+    private static string NormalizeText(string text, JsonObject root, HashSet<string> visited) =>
+        System.Text.RegularExpressions.Regex.Replace(text, @"<element:[^>]+>", match =>
+        {
+            var parts = match.Value[1..^1].Split(':');
+            if(parts.Length > 3 || parts.Length == 3 && parts[1] != Text(root, "Name")) return match.Value;
+            var name = parts[^1];
+            if(!visited.Add(name)) return "<capture:cycle>";
+            var matches = Elements(root).Where(x => Text(x, "Name") == name).ToArray();
+            if(matches.Length != 1) { visited.Remove(name); return match.Value; }
+            var predicate = Predicate(matches[0]);
+            NormalizeReferences(predicate, root, visited);
+            visited.Remove(name);
+            return "<capture:" + ContentHash.Sha256(Canonical(predicate)) + ">";
+        });
 
     private static IEnumerable<JsonObject> SplitCasts(JsonObject element)
     {
         var ids = Ids(element, "refActorCastId").ToArray();
-        if(Bool(element, "refActorRequireCast") && !Bool(element, "refActorCastReverse") && ids.Length > 1)
+        if(Int(element, "type") is 1 or 3 or 4 && Bool(element, "refActorRequireCast") && !Bool(element, "refActorCastReverse") && ids.Length > 1)
         {
             foreach(var id in ids)
             {
@@ -266,6 +368,8 @@ public static class LayoutCoverageAnalyzer
         JsonObject obj => "{" + string.Join(',', obj.OrderBy(x => x.Key, StringComparer.Ordinal)
             .Select(x => JsonSerializer.Serialize(x.Key) + ":" + Canonical(x.Value))) + "}",
         JsonArray array => "[" + string.Join(',', array.Select(Canonical)) + "]",
+        JsonValue value when value.TryGetValue<JsonElement>(out var element) && element.ValueKind == JsonValueKind.Number && element.TryGetDecimal(out var number)
+            => number.ToString("G29", System.Globalization.CultureInfo.InvariantCulture),
         _ => node?.ToJsonString() ?? "null",
     };
 

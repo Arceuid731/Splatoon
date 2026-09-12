@@ -51,6 +51,7 @@ public sealed record CoveragePreferences
     public HashSet<string> DisabledMechanics { get; init; } = [];
     public Dictionary<string, string> SelectedAlternatives { get; init; } = [];
     public HashSet<string> MigratedInstallations { get; init; } = [];
+    public HashSet<string> DisabledScripts { get; init; } = [];
 
     public bool Allows(CoverageContribution contribution) => Enabled &&
         !DisabledTerritories.Contains(contribution.TerritoryId) && contribution.Claims.All(claim =>
@@ -62,10 +63,11 @@ public sealed record CoveragePreferences
 
 public sealed record CoverageLibrary
 {
-    public const int CurrentVersion = 1;
+    public const int CurrentVersion = 2;
     public int Version { get; init; } = CurrentVersion;
     public DateTimeOffset ComputedAt { get; init; }
     public string SourceRevision { get; init; } = "";
     public IReadOnlyList<CoverageContribution> Contributions { get; init; } = [];
+    public IReadOnlyDictionary<uint, IReadOnlyList<string>> PreparedSelections { get; init; } = new Dictionary<uint, IReadOnlyList<string>>();
     public IReadOnlyList<string> Diagnostics { get; init; } = [];
 }

@@ -935,7 +935,8 @@ internal unsafe static partial class ScriptingProcessor
     internal static void UpdateState(this SplatoonScript s)
     {
         var territoryIsValid = s.ValidTerritories == null || (Svc.ClientState.IsLoggedIn && (s.ValidTerritories.Count == 0 || s.ValidTerritories.Contains(Svc.ClientState.TerritoryType)));
-        if(territoryIsValid && !P.Config.DisabledScripts.Contains(s.InternalData.FullName))
+        if(territoryIsValid && !P.Config.DisabledScripts.Contains(s.InternalData.FullName) &&
+           P.PresetHub?.AllowsScript(s.InternalData.FullName, Svc.ClientState.TerritoryType) != false)
         {
             if(!s.IsEnabled)
             {

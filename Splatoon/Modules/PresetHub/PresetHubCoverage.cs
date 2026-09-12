@@ -2,6 +2,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Splatoon.PresetHub.Core;
 using Splatoon.Utility;
+using Splatoon.SplatoonScripting;
 
 namespace Splatoon.Modules.PresetHub;
 
@@ -17,7 +18,7 @@ internal sealed partial class PresetHubModule
     private string localRevision = "";
     private readonly Dictionary<uint, CoveragePlan> coveragePlans = [];
     private Dictionary<uint, CoverageContribution[]> contributionsByTerritory = [];
-    private CoverageLibrary indexedLibrary;
+    private CoverageLibrary? indexedLibrary;
     private string indexedSources = "";
     private string runtimeSources = "";
     private IReadOnlyList<CoverageContribution> localContributions = [];
@@ -25,11 +26,29 @@ internal sealed partial class PresetHubModule
     private HashSet<Layout> replacedLayouts = [];
     private IReadOnlyList<Layout> coverageLayouts = [];
     private Dictionary<string, (string Fingerprint, Layout Layout)> activeCoverage = [];
+    private IReadOnlyList<PresetEntry>? scriptCatalogSource;
+    private string scriptInstallationsKey = "";
+    private Dictionary<uint, PresetEntry[]> scriptsByTerritory = [];
+    private PresetEntry[] globalScripts = [];
+    internal IReadOnlyCollection<uint> CoverageTerritories { get { IndexCoverageSources(); return contributionsByTerritory.Keys; } }
     internal string CoverageMessage { get; private set; } = "Preparing coverage...";
     internal CoverageLibrary Coverage { get { lock(gate) return coverageLibrary; } }
     internal CoveragePreferences CoveragePreferences => coveragePreferences;
     internal IReadOnlyList<Layout> CoverageLayouts => coverageLayouts;
-    internal bool ReplacesLayout(Layout layout) => coveragePreferences.Enabled && replacedLayouts.Contains(layout);
+    internal bool ReplacesLayout(Layout layout) => replacedLayouts.Contains(layout);
+
+    internal bool AllowsScript(string identity, uint territory) =>
+        !Installer.Records.Any(x => x.Kind == PresetKind.Script && x.RuntimeIdentity == identity) ||
+        coveragePreferences.Enabled && !coveragePreferences.DisabledTerritories.Contains(territory) &&
+        !coveragePreferences.DisabledScripts.Contains($"{territory}:{identity}");
+
+    internal void SetScriptEnabled(uint territory, string identity, bool enabled)
+    {
+        var disabled = coveragePreferences.DisabledScripts.ToHashSet();
+        var key = $"{territory}:{identity}";
+        if(enabled) disabled.Remove(key); else disabled.Add(key);
+        SetCoveragePreferences(coveragePreferences with { DisabledScripts = disabled });
+    }
 
     private void InitializeCoverage()
     {
@@ -80,9 +99,28 @@ internal sealed partial class PresetHubModule
 
     internal CoveragePlan CoveragePlanFor(uint territory)
     {
+        IndexCoverageSources();
         if(!coveragePlans.TryGetValue(territory, out var plan))
             coveragePlans[territory] = plan = CoveragePlanner.Compute(ContributionsFor(territory), territory, coveragePreferences);
         return plan;
+    }
+
+    internal IReadOnlyList<PresetEntry> ScriptSourcesFor(uint territory)
+    {
+        var catalog = Presets;
+        var installationKey = string.Join('|', Installer.Records.Where(x => x.Kind == PresetKind.Script)
+            .Select(x => x.PresetId + ":" + x.ContentHash));
+        if(!ReferenceEquals(scriptCatalogSource, catalog) || installationKey != scriptInstallationsKey)
+        {
+            var scripts = Installer.IncludeUnavailableInstallations(catalog.Where(x => x.Kind == PresetKind.Script).ToArray())
+                .Where(x => x.Kind == PresetKind.Script).DistinctBy(x => x.RuntimeIdentity).ToArray();
+            scriptsByTerritory = scripts.SelectMany(script => script.TerritoryIds.Select(id => (id, script)))
+                .GroupBy(x => x.id).ToDictionary(x => x.Key, x => x.Select(y => y.script).ToArray());
+            globalScripts = scripts.Where(x => x.TerritoryIds.Count == 0 && Installer.GetStatus(x) != InstallationStatus.NotInstalled).ToArray();
+            scriptCatalogSource = catalog;
+            scriptInstallationsKey = installationKey;
+        }
+        return (scriptsByTerritory.GetValueOrDefault(territory) ?? []).Concat(globalScripts).ToArray();
     }
 
     internal void SetCoveragePreferences(CoveragePreferences preferences)
@@ -117,10 +155,12 @@ internal sealed partial class PresetHubModule
 
     private void UpdateCoverageRuntime()
     {
+        var managedScripts = Installer.Records.Where(x => x.Kind == PresetKind.Script).Select(x => x.RuntimeIdentity).ToHashSet();
+        foreach(var script in ScriptingProcessor.Scripts.Where(x => managedScripts.Contains(x.InternalData.FullName))) script.UpdateState();
         var library = Coverage;
         var territory = (uint)Svc.ClientState.TerritoryType;
         IndexCoverageSources();
-        var changed = !ReferenceEquals(runtimeLibrary, library) || runtimeSources != indexedSources;
+        var changed = !ReferenceEquals(runtimeLibrary, library) || runtimeSources != indexedSources || runtimeTerritory != territory;
         if(changed || Environment.TickCount64 >= nextLocalCheck)
         {
             nextLocalCheck = Environment.TickCount64 + 2000;
@@ -193,7 +233,7 @@ internal sealed partial class PresetHubModule
             var repository = new RepositoryDefinition { Id = "local-installations", Owner = "Local", Name = "Saved aids" };
             var entry = new PresetIndexer().Index(repository, [(record.PresetId + ".md", serialized[i])]).FirstOrDefault();
             if(entry == null) continue;
-            var analysis = LayoutCoverageAnalyzer.Analyze(entry);
+            var analysis = LayoutCoverageAnalyzer.AnalyzeInstalled(entry, Svc.ClientState.TerritoryType);
             if(analysis.Contributions.Count == 0) continue;
             overridden.UnionWith(library.Contributions.Where(x => x.SourcePresetId == record.Preset.Id ||
                 x.SourceUri == record.SourceUri && x.SourceTitle == record.Preset.Title).Select(x => x.SourcePresetId));

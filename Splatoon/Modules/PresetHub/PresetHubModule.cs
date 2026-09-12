@@ -33,6 +33,7 @@ internal sealed partial class PresetHubModule : IDisposable
     internal PresetHubInstaller Installer { get; }
     internal ScriptSecurityAnalyzer SecurityAnalyzer { get; } = new();
     internal bool IsSyncing => syncing;
+    internal bool HasSyncErrors { get; private set; }
     internal string LastMessage { get; private set; } = "Using local cache.";
 
     internal PresetHubModule()
@@ -90,17 +91,8 @@ internal sealed partial class PresetHubModule : IDisposable
         }
     }
 
-    internal IReadOnlyList<PresetEntry> GetDutySuggestions(uint territoryId) =>
-        DutyPresetMatcher.FindSuggestions(Presets, territoryId, Installer.GetFamilyStatus);
-
     internal IReadOnlyList<PresetEntry> InstalledPresets =>
         Installer.IncludeUnavailableInstallations(Presets).Select(ResolveFamilyTerritoryMetadata).ToArray();
-
-    internal IReadOnlyDictionary<string, string> RecommendDutyLayouts(uint territoryId, IReadOnlyList<PresetEntry> suggestions) =>
-        DutyLayoutSelection.Recommend(suggestions,
-            InstalledPresets.SelectMany(x => x.Variants.Count > 0 ? x.Variants : [x])
-                .Where(x => x.Kind == PresetKind.Layout && x.TerritoryIds.Contains(territoryId) &&
-                            Installer.GetStatus(x) == InstallationStatus.Installed));
 
     internal void SetDutyPromptsEnabled(bool enabled)
     {
@@ -145,7 +137,7 @@ internal sealed partial class PresetHubModule : IDisposable
             return;
         }
         var hasCoverage = ContributionsFor(territoryId).Count > 0 ||
-            Presets.Any(x => x.Kind == PresetKind.Script && x.TerritoryIds.Contains(territoryId));
+            ScriptSourcesFor(territoryId).Count > 0;
         promptScheduler.CompleteCheck(hasCoverage, IsSyncing);
         if(hasCoverage) dutyPromptWindow.Show(territoryId);
     }
@@ -207,11 +199,18 @@ internal sealed partial class PresetHubModule : IDisposable
             }
         }
         catch(OperationCanceledException) when(lifetime.IsCancellationRequested) { }
+        catch(Exception exception)
+        {
+            errors.Add("coverage calculation");
+            CoverageMessage = "Coverage could not be updated. Using the saved library.";
+            exception.Log();
+        }
         finally
         {
             lock(gate)
             {
                 syncing = false;
+                HasSyncErrors = errors.Count > 0;
                 var enabledIds = repositories.Where(x => x.Enabled).Select(x => x.Id).ToHashSet(StringComparer.Ordinal);
                 var rawPresets = snapshots.Values.Where(x => enabledIds.Contains(x.Repository.Id)).SelectMany(x => x.Presets).ToArray();
                 var result = PresetCatalog.Create(rawPresets);

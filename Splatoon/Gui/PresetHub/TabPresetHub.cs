@@ -24,14 +24,16 @@ internal static class TabPresetHub
     private static string repositoryError = "";
     private static string actionMessage = "";
     private static bool openSourceLibrary;
+    private static bool openCoverage;
 
     internal static void Draw()
     {
         var hub = P.PresetHub;
         if(ImGui.BeginTabBar("PresetHubTabs"))
         {
-            if(ImGui.BeginTabItem("Coverage"))
+            if(ImGui.BeginTabItem("Coverage", openCoverage ? ImGuiTabItemFlags.SetSelected : ImGuiTabItemFlags.None))
             {
+                openCoverage = false;
                 TabCoverage.Draw(hub);
                 ImGui.EndTabItem();
             }
@@ -192,6 +194,18 @@ internal static class TabPresetHub
         ImGui.TableNextColumn();
 
         var primaryActionDrawn = false;
+        if(preset.Kind == PresetKind.Layout)
+        {
+            if(preset.TerritoryIds.Count > 0 && ImGui.Button("Coverage"))
+            {
+                TabCoverage.Open(preset.TerritoryIds[0]);
+                openCoverage = true;
+            }
+            if(preset.TerritoryIds.Count > 0) ImGui.SameLine();
+            if(ImGui.Button("Source")) ECommons.GenericHelpers.ShellStart(preset.SourceUri);
+            ImGui.PopID();
+            return;
+        }
         if(preset.VariantCount > 1)
         {
             if(ImGui.Button($"Choose ({preset.VariantCount})")) selectedFamily = preset;

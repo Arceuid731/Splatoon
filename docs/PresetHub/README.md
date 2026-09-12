@@ -1,53 +1,113 @@
-# Preset Hub
+# Preset Hub — mechanic coverage
 
-Preset Hub discovers Splatoon layouts and scripts in public GitHub repositories. It proposes matching content on duty entry and supports batch installation, variant comparison, updates and uninstall.
+The hub builds a persistent library of drawing aids from public GitHub sources.
+Layouts are source documents, not the unit players have to install. Updating the
+library analyzes all enabled sources and prepares selections for every identified
+territory. The entry panel shows coverage and remembered activation controls.
 
-## Components
+## Player workflow
 
-- `Splatoon.PresetHub.Core`: revision-pinned GitHub downloads, versioned cache, indexing, deduplication, source provenance, installation records, territory matching and advisory script analysis.
-- `Splatoon/Modules/PresetHub`: cancellable refresh coordination and the adapter to Splatoon's importer/compiler.
-- `Splatoon/Gui/PresetHub`: Browse, Installed, Repositories, Duty prompts and the entry window.
-- `Splatoon.PresetHub.Core.Tests`: core tests and the production installer compiled against a minimal test host.
-- `tools/PresetHubAudit`: reads an existing cache and inspects candidate sources, writing only to the supplied output directory.
+- **Coverage**: game-data area hierarchy, encounters identified by active actor IDs,
+  mechanics, other aids, per-area/encounter/mechanic toggles and drawing previews.
+- **Update coverage**: refresh sources and recompute their combined contributions.
+- **Source library**: inspect provenance and review executable scripts. Layout rows
+  open their coverage instead of installing a second independent copy.
+- **Installed**: retained installation records; managed layout backups remain in the
+  original configuration. Scripts keep their review/update/uninstall controls.
+- **Repositories / Duty prompts**: source selection and entry-panel preferences.
 
-## Behaviour
+Sources do not provide an exhaustive encounter reference. Counts describe identified
+mechanics in the library, not a percentage of all mechanics in a fight. No Foretell
+code or data is required. Unclassified but scoped aids appear under other aids in
+the relevant area. Already-installed global aids are scoped to the current area for
+display and control while preserving their original blacklist.
 
-Catalogue upgrades add eight sources: Hibiya615's English set, Leathen, SourP, NebulousByte, RedAsteroid, Lu-Jiejie, MisaUo and OkuKatsu. These new sources are enabled and restricted to layout installation. All existing source settings are preserved. The full catalogue has 17 sources.
+## Compilation and merging
 
-Downloads use a fixed commit and up to eight concurrent requests. The cache is reused only when revision, index schema and source settings match. Failed or cancelled refreshes retain the previous snapshot. Concurrent refresh requests are coalesced; unloading cancels network work.
+`LayoutCoverageAnalyzer` reads the predicates used by the current Splatoon runtime.
+An inactive cast/buff/time/distance field does not count as a predicate. Fixed shapes
+do not inherit inactive actor filters. Cast OR-lists can be separated; inverted
+tests stay intact. Capture dependencies and conditional sequences form connected
+groups. Trigger-driven layouts, subconfigurations and freezing remain indivisible.
 
-The indexer handles modern and legacy exports, including multiline and inline Markdown. Payloads are compacted for Splatoon's line-based importer. Unrelated export reordering no longer changes identities. Same-name variants use content fingerprints. Exact copies are collapsed, while different versions retain a choice panel. Unscoped layouts in unrelated files are not grouped solely by name.
+Each contribution retains its complete executable layout fragment and source. A
+claim identifies its territory, actor context, active signals, predicate and aid
+role. Geometry/text variants with equivalent conditions compete for the same aid;
+different roles such as an area and a textual reminder remain complementary. Local
+capture references are normalized by the captured condition rather than translated
+element names. Original names and references remain intact in executable fragments.
 
-Territories are read from literal collections on the actual script class, including generic `SplatoonScript<T>` bases. Computed expressions are not guessed. A layout's zone blacklist is not treated as an inclusion list.
+`CoveragePlanner` maximizes distinct aid coverage under those conflicts, without
+splitting linked contributions. Equally covering variants prefer local changes,
+language-independent matching, readable English text and source confidence. An
+explicit choice takes precedence. A bounded search handles unusually entangled
+sets; its completion flag is retained for diagnostics. This is structural analysis,
+not proof that a drawing's strategy or timing is correct.
 
-Duty suggestions can use the cache during refresh. An empty cache waits for refresh completion instead of expiring after 30 seconds. Leaving the territory cancels the pending visit. Closing the prompt postpones it until the next visit; permanent suppression remains configurable.
+`CoverageLibraryBuilder` caches analysis per export revision and prepares all area
+selections. Changes to source content, compatibility or metadata invalidate the
+affected entries. The compiled library and activation preferences are persisted
+separately with atomic file replacement. Unchanged library refreshes preserve live
+runtime objects, including their trigger state.
 
-The default batch avoids selecting layouts with overlapping cast, status or VFX identifiers, taking existing managed installations into account. Broader coverage and English editions are preferred. The NPC identity alone does not suppress complementary mechanics. Alternatives remain manually selectable. This is conservative selection, not proof of semantic equivalence: partial overlaps may leave unique content unchecked, and overlays without comparable mechanic IDs can still overlap.
+The catalogue contains 17 sources. All of Hibiya615's repository is indexed, not
+only `[EN Set]`; English preference applies to content wherever it appears. The
+previous built-in EN-only restriction is migrated while retaining enabled and
+script-installation settings. The eight added repositories remain layout-only.
+Downloads are pinned to a commit, bounded in size and concurrent. Failed refreshes
+retain cached data and are reported on the main coverage page.
 
-Layout replacements restore previous objects, ordering and UI selection on import or registry-write failure. Name collisions remain blocked even with Ctrl held. New installations receive a persistent ownership ID that survives renaming. External imports have any supplied ownership ID cleared. Legacy installations use their old names, with ambiguous matches excluded from removal.
+## Runtime and existing installations
 
-Records retain a source entry so installations remain accessible after source removal. Old ordinal records are matched by content or unambiguous source/runtime identity, never by assuming that a new export at the same position is the old preset.
+Prepared fragments are passed to Splatoon's existing renderers. The coverage library
+does not insert thousands of layouts into the user's configuration. Old managed
+layouts are retained as backups and skipped only after a replacement runtime set
+has been prepared successfully. Preparation failure keeps the previous set and its
+ownership decisions together.
 
-Reviewed scripts are recorded after successful loading and initialization, rather than when compilation is queued. Failed compilation can be retried. Pending duplicate installs and collisions with an unmanaged loaded script are blocked. The compiler's cache flag and completion callbacks belong to each queue entry.
+Local geometry/condition changes are retained and suppress the corresponding remote
+export. Existing disabled layouts/groups seed remembered opt-outs once. Later hub
+choices are not repeatedly overwritten by that migration. Disabling the library
+does not reactivate its old managed backups. Untouched manual layouts remain under
+Splatoon's normal layout controls.
 
-## Limits
+Reviewed scripts remain executable code and are not merged by this layout compiler.
+They appear in a separate scripted-aids section, including saved unavailable sources
+and installed global scripts. Managed scripts have per-area opt-outs; area/global
+hub controls also gate them. Unmanaged scripts retain their normal controls. Script
+installation records are written only after successful loading and initialization.
 
-- Static script analysis is advisory; scripts execute with the plugin's access.
-- Parsing and builds do not validate encounter timings, mechanic coverage or rendering in game.
-- Legacy installations renamed before this update, or already missing their cache, may require manual reconciliation. Old records cannot establish retrospectively whether a previously queued script compiled successfully.
-- Config and registry persistence is not a crash-atomic multi-file transaction.
-- GitHub rate limits can temporarily block refresh; cached content remains usable.
-- Private repositories, Discord attachments and wiki pages are not directly indexed. Wiki links help locate source repositories.
-- A simultaneous source path/name/content change cannot always be matched safely; the previous installation remains available for management.
+## Preview
 
-## Validation
+The isolated top-down preview uses example actor/player positions. It supports
+circles, rings, cones, lines/rectangles, text, tethers and knockback extensions.
+Geometry follows the renderer's coordinate/rotation conventions and applies current
+display-style overrides. It never adds a live layout or fires a game event.
+
+Encounter timing, live target resolution, cast animation and gradients are not
+replayed. Hitbox assumptions and dynamic position/direction limitations are shown
+when relevant. Capture-only elements are identified as non-drawing elements.
+
+## Validation and limits
 
 ```powershell
-dotnet test Splatoon.PresetHub.Core.Tests/Splatoon.PresetHub.Core.Tests.csproj --configuration Release
+dotnet test Splatoon.PresetHub.Core.Tests --configuration Release
 dotnet build Splatoon/Splatoon.csproj --configuration Release -p:Platform=x64
-dotnet run --project tools/PresetHubAudit --configuration Release -- artifacts/audit PATH_TO_EXISTING_CACHE Hibiya615/Splatoon_Presets
+dotnet run --project tools/PresetHubAudit --configuration Release -- --coverage artifacts/coverage-audit PATH_TO_EXISTING_CACHE PATH_TO_CANDIDATE_CACHE
 ```
 
-A local directory of candidate snapshots can replace the final repository argument to audit default selections without network access. The package workflow reads the artifact version from the project and runs the tests. The published repository manifest remains on the last published version until a new release is approved and uploaded.
+Tests include the production installer and coverage runtime adapter compiled into a
+minimal host, plus planner, persistence, dependency, migration and preview geometry
+checks. The corpus audit verifies plans across all cached territories. These checks
+do not constitute live battle validation. A new-game-session check remains useful
+after updating, particularly for encounter-specific dynamic drawings.
 
-See [the September 2026 audit](Audit-2026-09-12.md) for findings and checked sources.
+Ambiguous legacy ownership, missing historical source content and external capture
+dependencies cannot always be reconstructed. Existing layout files are retained.
+New unscoped source exports are visible in the source library but are not assumed
+applicable everywhere. Private repositories, Discord attachments and wiki pages are
+not directly fetched. GitHub rate limits can postpone new data while cached coverage
+remains available.
+
+See [the implementation checklist](Coverage-refactor.md) and
+[the original audit](Audit-2026-09-12.md).

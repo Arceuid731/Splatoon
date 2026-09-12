@@ -1,6 +1,13 @@
 name: Package Preset Hub
 
 on:
+  push:
+    branches: ["codex/preset-hub-v1"]
+    paths:
+      - "Splatoon/**"
+      - "Splatoon.PresetHub.Core/**"
+      - "Splatoon.PresetHub.Core.Tests/**"
+      - ".github/workflows/Package Preset Hub.yml"
   workflow_dispatch:
 
 permissions:

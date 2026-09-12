@@ -4,6 +4,7 @@ using Splatoon.SplatoonScripting;
 
 namespace Splatoon.PresetHub.Core.Tests.Runtime;
 
+[Collection("Plugin runtime")]
 public sealed class InstallerTests : IDisposable
 {
     private readonly string directory = Path.Combine(Path.GetTempPath(), "PresetHubTests", Guid.NewGuid().ToString("N"));

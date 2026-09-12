@@ -18,13 +18,14 @@ internal static class TabCoverage
     private static uint selectedTerritory;
     private static string expandedMechanic = "";
     private static CoverageContribution preview;
+    internal static void Open(uint territory) => selectedTerritory = territory;
 
     internal static void Draw(PresetHubModule hub)
     {
         if(!ReferenceEquals(lastLibrary, hub.Coverage))
         {
             lastLibrary = hub.Coverage;
-            var covered = lastLibrary.Contributions.Select(x => x.TerritoryId).ToHashSet();
+            var covered = hub.CoverageTerritories.ToHashSet();
             areas = Svc.Data.GetExcelSheet<TerritoryType>()
                 .Where(row => !string.IsNullOrWhiteSpace(row.ContentFinderCondition.ValueNullable?.Name.ToString()) || covered.Contains(row.RowId))
                 .Select(row => new Area(row.RowId, ExcelTerritoryHelper.GetName(row.RowId, true),
@@ -39,11 +40,12 @@ internal static class TabCoverage
         ImGui.SameLine();
         if(ImGui.Button("Current area")) selectedTerritory = Svc.ClientState.TerritoryType;
         ImGui.TextDisabled(hub.CoverageMessage);
+        if(hub.HasSyncErrors) ImGuiEx.TextWrapped(ImGuiColors.DalamudYellow, hub.LastMessage);
         ImGui.SetNextItemWidth(320f.Scale());
         ImGui.InputTextWithHint("##CoverageSearch", "Search instances...", ref search, 160);
         ImGui.SameLine();
         ImGui.Checkbox("With available aids", ref withAidsOnly);
-        var availableTerritories = hub.Coverage.Contributions.Select(x => x.TerritoryId).ToHashSet();
+        var availableTerritories = hub.CoverageTerritories.ToHashSet();
         var filtered = areas.Where(x => (!withAidsOnly || availableTerritories.Contains(x.Id)) &&
             (search.Length == 0 || (x.Name + " " + x.Expansion + " " + x.Category).Contains(search, StringComparison.OrdinalIgnoreCase)));
         if(ImGui.BeginTable("CoveragePanels", 2, ImGuiTableFlags.Resizable))
@@ -108,60 +110,97 @@ internal static class TabCoverage
                 ImGuiTreeNodeFlags.DefaultOpen);
             if(open)
             {
+                if(ImGui.BeginTable("Mechanics", 4, ImGuiTableFlags.RowBg | ImGuiTableFlags.Resizable))
+                {
+                ImGui.TableSetupColumn("Use", ImGuiTableColumnFlags.WidthFixed, 28f.Scale());
+                ImGui.TableSetupColumn("Mechanic", ImGuiTableColumnFlags.WidthStretch);
+                ImGui.TableSetupColumn("State", ImGuiTableColumnFlags.WidthFixed, 64f.Scale());
+                ImGui.TableSetupColumn("View", ImGuiTableColumnFlags.WidthFixed, 130f.Scale());
                 foreach(var mechanic in actor.GroupBy(x => x.Claim.MechanicId).OrderBy(x => MechanicName(x.First().Claim)))
                 {
                     var claim = mechanic.First().Claim;
                     var options = mechanic.Select(x => x.Option).DistinctBy(x => x.Id).ToArray();
                     ImGui.PushID(mechanic.Key);
+                    ImGui.TableNextRow();
+                    ImGui.TableNextColumn();
                     var mechanicEnabled = !hub.CoveragePreferences.DisabledMechanics.Contains(mechanic.Key);
                     if(ImGui.Checkbox("##mechanic", ref mechanicEnabled)) hub.SetMechanicEnabled(mechanic.Key, mechanicEnabled);
-                    ImGui.SameLine();
-                    ImGui.TextUnformatted(MechanicName(claim));
-                    ImGui.SameLine();
+                    ImGui.TableNextColumn();
+                    ImGuiEx.TextWrapped(MechanicName(claim));
+                    ImGui.TableNextColumn();
                     ImGui.TextColored(active.Contains(mechanic.Key) ? ImGuiColors.HealerGreen : ImGuiColors.DalamudGrey,
                         active.Contains(mechanic.Key) ? "Active" : "Inactive");
+                    ImGui.TableNextColumn();
+                    if(ImGui.SmallButton("Preview")) preview = options.FirstOrDefault(x => plan.Selected.Any(y => y.Id == x.Id)) ?? options.OrderByDescending(x => x.LanguageRank).First();
                     ImGui.SameLine();
                     if(ImGui.SmallButton("Details")) expandedMechanic = expandedMechanic == mechanic.Key ? "" : mechanic.Key;
-                    if(expandedMechanic == mechanic.Key)
-                    {
-                        foreach(var option in options.OrderByDescending(x => plan.Selected.Any(s => s.Id == x.Id)).ThenByDescending(x => x.LanguageRank))
-                        {
-                            ImGui.PushID(option.Id);
-                            var selected = plan.Selected.Any(x => x.Id == option.Id);
-                            ImGui.TextUnformatted($"{(selected ? "• " : "")}{option.SourceTitle} · {option.RepositoryName}");
-                            ImGui.TextDisabled(string.Join(", ", option.Claims.Where(x => x.MechanicId == mechanic.Key).Select(x => x.Role).Distinct()));
-                            if(option.Detail.Length > 0) ImGui.TextDisabled(option.Detail);
-                            if(option.Linked) ImGui.TextDisabled($"{option.Claims.Select(x => x.MechanicId).Distinct().Count()} mechanics share these drawings.");
-                            if(ImGui.SmallButton("Preview")) preview = option;
-                            ImGui.SameLine();
-                            if(ImGui.SmallButton("Source")) ECommons.GenericHelpers.ShellStart(option.SourceUri);
-                            if(!selected && option.Automatic)
-                            {
-                                ImGui.SameLine();
-                                if(ImGui.SmallButton("Use this version"))
-                                {
-                                    var alternatives = new Dictionary<string, string>(hub.CoveragePreferences.SelectedAlternatives)
-                                        { [CoveragePlanner.CoverageKey(option)] = option.Id };
-                                    hub.SetCoveragePreferences(hub.CoveragePreferences with { SelectedAlternatives = alternatives });
-                                }
-                            }
-                            ImGui.PopID();
-                        }
-                    }
                     ImGui.PopID();
+                }
+                ImGui.EndTable();
                 }
                 ImGui.TreePop();
             }
             ImGui.PopID();
         }
-        var scripts = hub.Presets.Where(x => x.Kind == PresetKind.Script && x.TerritoryIds.Contains(territory)).ToArray();
-        if(scripts.Length > 0 && ImGui.TreeNodeEx("Scripted aids", ImGuiTreeNodeFlags.DefaultOpen))
+        var expanded = claims.Where(x => x.Claim.MechanicId == expandedMechanic).ToArray();
+        if(expanded.Length > 0)
+        {
+            ImGui.Separator();
+            ImGuiEx.TextWrapped(MechanicName(expanded[0].Claim));
+            foreach(var option in expanded.Select(x => x.Option).DistinctBy(x => x.Id)
+                        .OrderByDescending(x => plan.Selected.Any(s => s.Id == x.Id)).ThenByDescending(x => x.LanguageRank))
+            {
+                ImGui.PushID(option.Id);
+                var selected = plan.Selected.Any(x => x.Id == option.Id);
+                ImGuiEx.TextWrapped($"{(selected ? "• " : "")}{option.SourceTitle} · {option.RepositoryName}");
+                ImGui.TextDisabled(string.Join(", ", option.Claims.Where(x => x.MechanicId == expandedMechanic).Select(x => x.Role).Distinct()));
+                if(option.Detail.Length > 0) ImGui.TextDisabled(option.Detail);
+                if(option.Linked && option.Claims.Select(x => x.MechanicId).Distinct().Count() > 1)
+                    ImGui.TextDisabled($"{option.Claims.Select(x => x.MechanicId).Distinct().Count()} mechanics share these drawings.");
+                if(ImGui.SmallButton("Preview")) preview = option;
+                ImGui.SameLine();
+                if(ImGui.SmallButton("Source")) ECommons.GenericHelpers.ShellStart(option.SourceUri);
+                if(!selected && option.Automatic)
+                {
+                    ImGui.SameLine();
+                    if(ImGui.SmallButton("Use this version"))
+                    {
+                        var alternatives = new Dictionary<string, string>(hub.CoveragePreferences.SelectedAlternatives);
+                        var key = CoveragePlanner.CoverageKey(option);
+                        alternatives.Remove(key);
+                        alternatives[key] = option.Id;
+                        hub.SetCoveragePreferences(hub.CoveragePreferences with { SelectedAlternatives = alternatives });
+                    }
+                }
+                var choiceKey = CoveragePlanner.CoverageKey(option);
+                if(hub.CoveragePreferences.SelectedAlternatives.ContainsKey(choiceKey))
+                {
+                    ImGui.SameLine();
+                    if(ImGui.SmallButton("Automatic choice"))
+                    {
+                        var alternatives = new Dictionary<string, string>(hub.CoveragePreferences.SelectedAlternatives);
+                        alternatives.Remove(choiceKey);
+                        hub.SetCoveragePreferences(hub.CoveragePreferences with { SelectedAlternatives = alternatives });
+                    }
+                }
+                ImGui.PopID();
+            }
+            if(ImGui.SmallButton("Close details")) expandedMechanic = "";
+        }
+        var scripts = hub.ScriptSourcesFor(territory);
+        if(scripts.Count > 0 && ImGui.TreeNodeEx("Scripted aids", ImGuiTreeNodeFlags.DefaultOpen))
         {
             ImGui.TextDisabled("Listed by script; individual mechanics are not indexed.");
             foreach(var script in scripts)
             {
                 ImGui.PushID(script.Id);
                 var running = ScriptingProcessor.Scripts.FirstOrDefault(x => x.InternalData.FullName == script.RuntimeIdentity);
+                if(hub.Installer.GetStatus(script) != InstallationStatus.NotInstalled)
+                {
+                    var scriptEnabled = !hub.CoveragePreferences.DisabledScripts.Contains($"{territory}:{script.RuntimeIdentity}");
+                    if(ImGui.Checkbox("##script", ref scriptEnabled)) hub.SetScriptEnabled(territory, script.RuntimeIdentity, scriptEnabled);
+                    ImGui.SameLine();
+                }
                 ImGui.TextUnformatted(script.Title);
                 ImGui.SameLine();
                 ImGui.TextDisabled(running?.IsEnabled == true ? "Active" : "Inactive");

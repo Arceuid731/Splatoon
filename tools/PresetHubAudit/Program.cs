@@ -86,17 +86,12 @@ foreach(var fullName in args.Skip(2))
             return new PresetIndexer().Index(definition, snapshot.Presets.GroupBy(x => x.RelativePath)
                 .Select(group => (group.Key, string.Join('\n', group.Select(x => x.Content)))));
         }).ToArray();
-        var families = PresetCatalog.Build(entries);
-        var selections = families.SelectMany(x => x.TerritoryIds).Distinct().Order().Select(territory =>
+        var library = new CoverageLibraryBuilder().Build(entries);
+        var selections = library.Contributions.GroupBy(x => x.TerritoryId).OrderBy(x => x.Key).Select(group =>
         {
-            var suggestions = DutyPresetMatcher.FindSuggestions(families, territory, _ => InstallationStatus.NotInstalled);
-            var selected = DutyLayoutSelection.Recommend(suggestions, []);
-            return new { territory, suggestions = suggestions.Count, selected = selected.Count,
-                choices = suggestions.Where(x => selected.ContainsKey(x.Id)).Select(family =>
-                {
-                    var choice = (family.Variants.Count > 0 ? family.Variants : [family]).Single(x => x.Id == selected[family.Id]);
-                    return new { choice.Title, choice.RepositoryName, choice.RelativePath };
-                }).ToArray() };
+            var plan = CoveragePlanner.Compute(group, group.Key);
+            return new { territory = group.Key, plan.AvailableAids, plan.CoveredAids,
+                choices = plan.Selected.Select(choice => new { choice.SourceTitle, choice.RepositoryName, choice.SourceUri }).ToArray() };
         }).ToArray();
         File.WriteAllText(Path.Combine(output, "duty-selection.json"), JsonSerializer.Serialize(selections, options));
         Console.WriteLine($"Checked default selection for {selections.Length} territories; E3: {JsonSerializer.Serialize(selections.Single(x => x.territory == 851))}");
