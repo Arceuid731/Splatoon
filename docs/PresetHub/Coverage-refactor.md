@@ -20,7 +20,7 @@ Pas de dépendance à Foretell. Publication de la version finale demandée par Y
 - [x] Popup de couverture sans installation ; aides non classées et scripts présentés.
 - [x] Suppression du badge Recommended et du flux de sélection de presets par défaut.
 - [x] Tests moteur, persistance, intégration et audit des sources réelles.
-- [ ] Build plugin, revue de l'interface, package, publication et manifeste in-game vérifiés.
+- [x] Build plugin, revue du code de l'interface, package, publication et manifeste in-game vérifiés (essais dans le client à faire).
 
 ## Principes d'implémentation
 
@@ -43,7 +43,7 @@ Branche `codex/preset-hub-upstream-review`, commit `842f54b1` après fusion upst
 sur des résumés de presets et exclut les familles installées. Le runtime d'origine
 interprète séparément les filtres activés et leurs valeurs.
 
-## Travail en cours (non publié)
+## Historique de la première passe (avant publication)
 
 Le moteur `LayoutCoverageAnalyzer` extrait des fragments autonomes et garde les
 conditions liées. `CoveragePlanner` résout les conflits entre contributions pour
@@ -98,5 +98,21 @@ contrôles mémorisés, choix avancés réversibles, erreurs de synchronisation 
 aucun ancien bouton Install dans les lignes de sources de layouts. Pas de rendu
 capturé dans un client FFXIV ni de test de combat exécuté pendant cette session.
 
-La publication et la vérification du manifeste public restent à consigner après
-réussite des workflows et contrôle du zip distribué.
+## Publication vérifiée le 12 septembre 2026
+
+La release [preset-hub-v3.0.0](https://github.com/Arceuid731/Splatoon/releases/tag/preset-hub-v3.0.0)
+est publiée en préversion, avec Splatoon 3.9.2.30 (API Dalamud 15).
+Le tag pointe sur `e4ae45c1ac6fbcd6eae60970b6bee960e75038f7`.
+Les workflows [tests](https://github.com/Arceuid731/Splatoon/actions/runs/34715876021)
+et [package Windows](https://github.com/Arceuid731/Splatoon/actions/runs/34715876079)
+ont réussi sur ce commit.
+
+Le zip public a été téléchargé et comparé au package de CI : SHA-256
+`5c0d103f76ff2839b22ab3e2875d62407610d06a9ed817e19184e2f77edf96d2`.
+Il contient `Splatoon.dll` version 3.9.2.30 et `Splatoon.PresetHub.Core.dll`.
+Le manifeste public du dépôt Dalamud existant propose cette même version et les
+liens d'installation, de mise à jour et de test pointent vers cet artefact.
+La configuration du joueur n'a pas été modifiée pour cette livraison.
+
+Validation restante côté joueur : chargement dans Dalamud, rendu de l'interface et
+essais en combat. Les tests de l'adaptateur runtime ne remplacent pas ces essais.
