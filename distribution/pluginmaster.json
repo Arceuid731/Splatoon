@@ -3,20 +3,19 @@
     "Author": "NightmareXIV; Preset Hub integration by Arceuid731",
     "Name": "Splatoon (Preset Hub)",
     "InternalName": "Splatoon",
-    "AssemblyVersion": "3.9.2.29",
-    "TestingAssemblyVersion": "3.9.2.29",
-    "Punchline": "Splatoon with a curated, provenance-aware preset catalogue.",
-    "Description": "A custom Splatoon build with Preset Hub V2.2: curated repositories, shared variant comparison, multi-preset duty installation, exact duty suggestions, managed installs, and explicit C# security review.",
+    "AssemblyVersion": "3.9.2.30",
+    "TestingAssemblyVersion": "3.9.2.30",
+    "Punchline": "Community overlays, organized by mechanic.",
+    "Description": "Build coverage from your sources, enable aids by encounter and mechanic, and preview their drawings. Review scripted aids from the source library.",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 15,
     "RepoUrl": "https://github.com/Arceuid731/Splatoon",
-    "DownloadLinkInstall": "https://github.com/Arceuid731/Splatoon/releases/download/preset-hub-v2.2.0/Splatoon-PresetHub-3.9.2.29.zip",
-    "DownloadLinkUpdate": "https://github.com/Arceuid731/Splatoon/releases/download/preset-hub-v2.2.0/Splatoon-PresetHub-3.9.2.29.zip",
-    "DownloadLinkTesting": "https://github.com/Arceuid731/Splatoon/releases/download/preset-hub-v2.2.0/Splatoon-PresetHub-3.9.2.29.zip",
+    "DownloadLinkInstall": "https://github.com/Arceuid731/Splatoon/releases/download/preset-hub-v3.0.0/Splatoon-PresetHub-3.9.2.30.zip",
+    "DownloadLinkUpdate": "https://github.com/Arceuid731/Splatoon/releases/download/preset-hub-v3.0.0/Splatoon-PresetHub-3.9.2.30.zip",
+    "DownloadLinkTesting": "https://github.com/Arceuid731/Splatoon/releases/download/preset-hub-v3.0.0/Splatoon-PresetHub-3.9.2.30.zip",
     "Tags": [
       "Utility",
       "Accessibility"
-    ],
-    "IconUrl": "https://love.puni.sh/resources/splatoon.png"
+    ]
   }
 ]
