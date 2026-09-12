@@ -131,6 +131,7 @@ SplatoonScriptsOfficial.Duties.Dawntrail@M11S_Fixed_Stampede,3,https://github.co
 SplatoonScriptsOfficial.Duties.Dawntrail@M11S_Meteorain,4,https://github.com/PunishXIV/Splatoon/raw/main/SplatoonScripts/Duties/Dawntrail/M11S Meteorain.cs
 SplatoonScriptsOfficial.Duties.Dawntrail.Forked_Tower_Magic@Boss_3_Dig_Three_Graves,1,https://github.com/PunishXIV/Splatoon/raw/main/SplatoonScripts/Duties/Dawntrail/Forked Tower Magic/Boss_3_Dig_Three_Graves.cs
 SplatoonScriptsOfficial.Duties.Dawntrail.Forked_Tower_Magic@Boss_2_KB,1,https://github.com/PunishXIV/Splatoon/raw/main/SplatoonScripts/Duties/Dawntrail/Forked Tower Magic/Boss_2_KB.cs
+SplatoonScriptsOfficial.Duties.Dawntrail.Forked_Tower_Magic@FT_Boss3_Fertile_Groud,1,https://github.com/PunishXIV/Splatoon/raw/main/SplatoonScripts/Duties/Dawntrail/Forked Tower Magic/FT_Boss3_Fertile_Groud.cs
 SplatoonScriptsOfficial.Duties.Dawntrail.The_Futures_Rewritten@P1_Bound_of_Faith,2,https://github.com/PunishXIV/Splatoon/raw/main/SplatoonScripts/Duties/Dawntrail/The Futures Rewritten/P1 Bound of Faith.cs
 SplatoonScriptsOfficial.Duties.Dawntrail.The_Futures_Rewritten@P1_Fall_of_Faith_EN,8,https://github.com/PunishXIV/Splatoon/raw/main/SplatoonScripts/Duties/Dawntrail/The Futures Rewritten/P1 Fall of Faith EN.cs
 SplatoonScriptsOfficial.Duties.Dawntrail.The_Futures_Rewritten@P1_Turn_of_the_Heavens,2,https://github.com/PunishXIV/Splatoon/raw/main/SplatoonScripts/Duties/Dawntrail/The Futures Rewritten/P1 Turn of the Heavens.cs
@@ -233,7 +234,7 @@ SplatoonScriptsOfficial.Duties.Endwalker@P12S_Caloric_Theory,2,https://github.co
 SplatoonScriptsOfficial.Duties.Endwalker@P12S_Wing_Cleaves,7,https://github.com/PunishXIV/Splatoon/raw/main/SplatoonScripts/Duties/Endwalker/P12S Wing Cleaves.cs
 SplatoonScriptsOfficial.Duties.Endwalker.Dragonsong_s_Reprise@P5_Death_of_the_Heavens,8,https://github.com/PunishXIV/Splatoon/raw/main/SplatoonScripts/Duties/Endwalker/Dragonsong's Reprise/P5 Death of the Heavens.cs
 SplatoonScriptsOfficial.Duties.Endwalker.Dragonsong_s_Reprise@P3_Dive_from_Grace,5,https://github.com/PunishXIV/Splatoon/raw/main/SplatoonScripts/Duties/Endwalker/Dragonsong's Reprise/P3 Dive from Grace.cs
-SplatoonScriptsOfficial.Duties.Endwalker.Dragonsong_s_Reprise@P5_Death_of_the_Heavens_Neo,8,https://github.com/PunishXIV/Splatoon/raw/main/SplatoonScripts/Duties/Endwalker/Dragonsong's Reprise/P5 Death of the Heavens Neo.cs
+SplatoonScriptsOfficial.Duties.Endwalker.Dragonsong_s_Reprise@P5_Death_of_the_Heavens_Neo,9,https://github.com/PunishXIV/Splatoon/raw/main/SplatoonScripts/Duties/Endwalker/Dragonsong's Reprise/P5 Death of the Heavens Neo.cs
 SplatoonScriptsOfficial.Duties.Endwalker.Dragonsong_s_Reprise@P6_AutoTargetSwitcher,5,https://github.com/PunishXIV/Splatoon/raw/main/SplatoonScripts/Duties/Endwalker/Dragonsong's Reprise/P6 AutoTargetSwitcher.cs
 SplatoonScriptsOfficial.Duties.Endwalker.Dragonsong_s_Reprise@P6_Wyrmsbreath_First,6,https://github.com/PunishXIV/Splatoon/raw/main/SplatoonScripts/Duties/Endwalker/Dragonsong's Reprise/P6 Wyrmsbreath First.cs
 SplatoonScriptsOfficial.Duties.Endwalker.Dragonsong_s_Reprise@P5_Caster_Limit_Break,2,https://github.com/PunishXIV/Splatoon/raw/main/SplatoonScripts/Duties/Endwalker/Dragonsong's Reprise/P5 Caster Limit Break.cs

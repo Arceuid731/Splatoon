@@ -23,7 +23,7 @@ namespace SplatoonScriptsOfficial.Duties.Endwalker.Dragonsong_s_Reprise;
 
 public sealed class P5_Death_of_the_Heavens_Neo : SplatoonScript
 {
-    public override Metadata Metadata { get; } = new(8, "NightmareXIV");
+    public override Metadata Metadata { get; } = new(9, "NightmareXIV");
     public override HashSet<uint>? ValidTerritories { get; } = [Raids.Dragonsongs_Reprise_Ultimate];
 
     IEnumerable<IPlayerCharacter> Players => Controller.GetPartyMembers();
@@ -82,11 +82,11 @@ public sealed class P5_Death_of_the_Heavens_Neo : SplatoonScript
         }
         if(vfxPath == "vfx/lockon/eff/r1fz_firechain_02x.avfx")
         {
-            Shapes[target] = Shape.GreenTriangle;
+            Shapes[target] = C.SwapPurpleGreen?Shape.PurpleSquare:Shape.GreenTriangle;
         }
         if(vfxPath == "vfx/lockon/eff/r1fz_firechain_03x.avfx")
         {
-            Shapes[target] = Shape.PurpleSquare;
+            Shapes[target] = C.SwapPurpleGreen?Shape.GreenTriangle:Shape.PurpleSquare;
         }
         if(vfxPath == "vfx/lockon/eff/r1fz_firechain_04x.avfx")
         {
@@ -273,12 +273,13 @@ public sealed class P5_Death_of_the_Heavens_Neo : SplatoonScript
     Config C => Controller.GetConfig<Config>();
     public class Config : IEzConfig
     {
-        public string BPO = "";
+        public bool SwapPurpleGreen = false;
         public CardinalDirection? ForceDirection = null;
     }
 
     public override void OnSettingsDraw()
     {
+        ImGui.Checkbox("Swap purple and green", ref C.SwapPurpleGreen);
         if(ImGui.CollapsingHeader("Debug"))
         {
             ImGuiEx.EnumCombo("Override position", ref C.ForceDirection);

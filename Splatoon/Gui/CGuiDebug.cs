@@ -27,6 +27,7 @@ internal unsafe partial class CGui
 
     private void DisplayDebug()
     {
+        ImGuiEx.Text(S.IPCProvider.GetRoleOf(Player.Object).ToString());
         if(ImGui.CollapsingHeader("Scripts w/prio list"))
         {
             foreach(var s in ScriptingProcessor.Scripts)
